@@ -103,11 +103,11 @@ else
     SUDO="sudo"
 fi
 
-# 🗂 Print directory structure
-echo "📂 Listing all files and subdirectories in /test-env/artifacts/ before installation:"
+# 🗂 Print full directory structure
+echo "📂 Listing all files in /test-env/artifacts/ before installation:"
 find /test-env/artifacts/ -type f
 
-# 🔎 Automatically find the correct `.deb` package directory
+# 🔎 Locate the `.deb` package directory dynamically
 DEB_DIR=$(find /test-env/artifacts/ -type d -path "*/var/cache/apt/archives" | head -n 1)
 
 # 🔥 If directory is not found, show error and exit
@@ -116,22 +116,26 @@ if [[ -z "$DEB_DIR" || ! -d "$DEB_DIR" ]]; then
     exit 1
 fi
 
-echo "📦 Using package directory: $DEB_DIR"
+echo "📦 Found .deb package directory: $DEB_DIR"
 
-# 🔍 Search for `.deb` packages
-DEB_FILES=$(find "$DEB_DIR" -type f -name "*.deb")
+# 🔍 Locate all `.deb` files in the directory
+DEB_FILES=$(find "$DEB_DIR" -maxdepth 1 -type f -name "*.deb")
 
-# 🔥 If no .deb files are found, show error and exit
+# 🔥 If no `.deb` files are found, print error and exit
 if [[ -z "$DEB_FILES" ]]; then
-    echo "⚠️ ERROR: No .deb packages found in $DEB_DIR! Exiting..."
+    echo "⚠️ ERROR: No .deb packages found in $DEB_DIR!"
+    echo "🔍 Retrying with manual listing:"
+    ls -lah "$DEB_DIR"
     exit 1
 fi
 
 # 📦 Print found .deb files before installation
 echo "📝 Found the following .deb files:"
-echo "$DEB_FILES"
+for FILE in $DEB_FILES; do
+    echo "  - $FILE"
+done
 
-# 🔽 Install each `.deb` package
+# 🚀 Install each `.deb` package
 for FILE in $DEB_FILES; do
     echo "📦 Installing: $FILE"
     $SUDO dpkg -i "$FILE" || true  # Continue even if dependencies are missing
@@ -140,9 +144,7 @@ done
 # 🔧 Fix missing dependencies
 echo "🔧 Resolving dependencies..."
 $SUDO apt-get install -f -y
-ech "try manual"
 
-$SUDO dpkg -i "/test-env/artifacts/var/cache/apt/archives/kubectl_1.29.13-1.1_amd64.deb" || true
 echo "✅ Installation complete!"
 
 EOF
