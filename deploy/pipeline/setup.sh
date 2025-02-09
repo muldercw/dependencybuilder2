@@ -4,6 +4,9 @@ set -e
 OS=$1
 K8S_VERSION=$2
 
+K8S_VERSION=$(echo "$K8S_VERSION" | tr -d '"')
+
+
 DEP_FILE="dependencies.yaml"
 PKG_DIR="offline_packages"
 ARCHIVE_FILE="offline_packages_${OS}_${K8S_VERSION}.tar.gz"
