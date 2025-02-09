@@ -81,71 +81,31 @@ if [[ "$PKG_MANAGER" == "apt" ]]; then
     sudo apt-get update -y
 fi
 
-# Download and Install Kubernetes Components
+# Install Kubernetes Components
 echo "Installing Kubernetes components for $OS..."
+sudo apt-get install -y --allow-downgrades kubeadm=${K8S_VERSION}-1.1 kubelet=${K8S_VERSION}-1.1 kubectl=${K8S_VERSION}-1.1 cri-tools conntrack
 
-if [[ "$PKG_MANAGER" == "apt" ]]; then
-    # ✅ Ensure all components use the correct version
-    sudo apt-get install -y --allow-downgrades kubeadm=${K8S_VERSION}-1.1 kubelet=${K8S_VERSION}-1.1 kubectl=${K8S_VERSION}-1.1 cri-tools conntrack
-
-    # ✅ Check installed versions
-    echo "Checking installed Kubernetes component versions..."
-    kubeadm version
-    kubectl version --client
-    kubelet --version
-
-elif [[ "$PKG_MANAGER" == "dnf" ]]; then
-    sudo dnf install -y kubeadm-$K8S_VERSION kubelet-$K8S_VERSION kubectl-$K8S_VERSION cri-tools conntrack
-    sudo systemctl enable kubelet
-
-elif [[ "$PKG_MANAGER" == "pacman" ]]; then
-    sudo pacman -Sy --noconfirm kubeadm kubelet kubectl cri-tools conntrack-tools
-    sudo systemctl enable kubelet
-
-elif [[ "$PKG_MANAGER" == "zypper" ]]; then
-    sudo zypper install -y kubeadm kubelet kubectl cri-tools conntrack-tools
-    sudo systemctl enable kubelet
-fi
-
-# Configure containerd
-echo "Configuring containerd..."
-sudo mkdir -p /etc/containerd
-containerd config default | sudo tee /etc/containerd/config.toml
-sudo systemctl restart containerd
-sudo systemctl enable containerd
-
-# ✅ Generate dependencies.yaml
-echo "Generating dependencies.yaml..."
-
-DEPENDENCIES_FILE="dependencies.yaml"
-
-echo "# Kubernetes Dependencies for $OS (K8S v$K8S_VERSION)" > "$DEPENDENCIES_FILE"
-echo "kubeadm: $K8S_VERSION" >> "$DEPENDENCIES_FILE"
-echo "kubelet: $K8S_VERSION" >> "$DEPENDENCIES_FILE"
-echo "kubectl: $K8S_VERSION" >> "$DEPENDENCIES_FILE"
-
-# ✅ Add OS-specific dependencies
-if [[ "$PKG_MANAGER" == "apt" ]]; then
-    echo "cri-tools: $(apt-cache madison cri-tools | head -n1 | awk '{print $3}')" >> "$DEPENDENCIES_FILE"
-    echo "conntrack: $(apt-cache madison conntrack | head -n1 | awk '{print $3}')" >> "$DEPENDENCIES_FILE"
-elif [[ "$PKG_MANAGER" == "dnf" ]]; then
-    echo "cri-tools: $(dnf list cri-tools --showduplicates | tail -n1 | awk '{print $2}')" >> "$DEPENDENCIES_FILE"
-    echo "conntrack: $(dnf list conntrack --showduplicates | tail -n1 | awk '{print $2}')" >> "$DEPENDENCIES_FILE"
-elif [[ "$PKG_MANAGER" == "pacman" ]]; then
-    echo "cri-tools: $(pacman -Si cri-tools | grep Version | awk '{print $3}')" >> "$DEPENDENCIES_FILE"
-    echo "conntrack: $(pacman -Si conntrack-tools | grep Version | awk '{print $3}')" >> "$DEPENDENCIES_FILE"
-elif [[ "$PKG_MANAGER" == "zypper" ]]; then
-    echo "cri-tools: $(zypper se -s cri-tools | grep -vE "S | Name" | awk '{print $7}' | head -n1)" >> "$DEPENDENCIES_FILE"
-    echo "conntrack: $(zypper se -s conntrack-tools | grep -vE "S | Name" | awk '{print $7}' | head -n1)" >> "$DEPENDENCIES_FILE"
-fi
-
-echo "Dependencies file created: $DEPENDENCIES_FILE"
-cat "$DEPENDENCIES_FILE"
-
-# ✅ Ensure artifacts are named correctly (No extra quotes)
+# ✅ Fix permission errors by ignoring inaccessible files
 TAR_FILE="offline_packages_${OS}_${K8S_VERSION}.tar.gz"
+INSTALL_SCRIPT="install_${OS}_${K8S_VERSION}.sh"
+CHECKSUM_FILE="checksums_${OS}_${K8S_VERSION}.sha256"
 
 echo "Creating offline package archive: $TAR_FILE"
-tar -czf "$TAR_FILE" /var/cache/apt/archives || echo "Warning: No APT cache found for offline packages."
+sudo tar --exclude="*/partial/*" --ignore-failed-read -czf "$TAR_FILE" /var/cache/apt/archives
+
+# ✅ Generate install script
+echo "Generating installation script: $INSTALL_SCRIPT"
+cat <<EOF > "$INSTALL_SCRIPT"
+#!/bin/bash
+set -e
+echo "Installing offline Kubernetes for $OS (v$K8S_VERSION)"
+sudo dpkg -i /var/cache/apt/archives/*.deb || sudo rpm -Uvh --force /var/cache/dnf/packages/*.rpm || sudo pacman -U --noconfirm /var/cache/pacman/pkg/*.pkg.tar.zst
+EOF
+
+chmod +x "$INSTALL_SCRIPT"
+
+# ✅ Generate SHA256 checksum
+echo "Generating SHA256 checksum file: $CHECKSUM_FILE"
+sha256sum "$TAR_FILE" "$INSTALL_SCRIPT" > "$CHECKSUM_FILE"
 
 echo "Installation complete."
