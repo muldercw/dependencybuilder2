@@ -103,27 +103,32 @@ else
     SUDO="sudo"
 fi
 
-# 🔍 Debug: List all files and subdirectories
+# 🔍 Debug: List all files in artifacts directory
 echo "📂 Listing all files and subdirectories in /test-env/artifacts/ before installation:"
 ls -lahR /test-env/artifacts/
 
-# 🔎 Ensure we are inside the correct working directory
-cd /test-env/artifacts/var/cache/apt/archives/ || { echo "❌ Error: Could not change to package directory"; exit 1; }
+# 🛠 Ensure the correct directory exists before searching
+DEB_DIR="/test-env/artifacts/var/cache/apt/archives"
+if [[ ! -d "$DEB_DIR" ]]; then
+    echo "❌ Error: Expected package directory $DEB_DIR does not exist!"
+    exit 1
+fi
 
-# 🔎 Debug: Show absolute paths of all .deb files
-echo "🔎 Searching for .deb packages in $(pwd) ..."
-DEB_FILES=$(find "$(pwd)" -type f -name "*.deb")
+# 🔎 Search for .deb packages in the correct directory
+echo "🔎 Searching for .deb packages in $DEB_DIR ..."
+DEB_FILES=$(find "$DEB_DIR" -type f -name "*.deb")
 
 # 🔍 Ensure we found valid .deb files
 if [[ -z "$DEB_FILES" ]]; then
-    echo "⚠️ Warning: No .deb packages found! Skipping offline installation."
+    echo "⚠️ Warning: No .deb packages found in $DEB_DIR! Skipping offline installation."
     exit 0
 fi
 
-# 📦 Install each package individually
+# 📦 Print found .deb files before installation
 echo "📦 Found the following .deb files:"
 echo "$DEB_FILES"
 
+# 🔽 Install each .deb package
 for file in $DEB_FILES; do
     if [[ -f "$file" ]]; then
         echo "📦 Installing: $file"
