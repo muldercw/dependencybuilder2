@@ -103,13 +103,17 @@ else
     SUDO="sudo"
 fi
 
+# 🔍 Debug: List all files and subdirectories in the artifacts directory
+echo "📂 Listing all files and subdirectories in /test-env/artifacts/ before installation:"
+ls -lahR /test-env/artifacts/
+
 # Ensure extracted packages exist before installing
 if ls /test-env/artifacts/*.deb 1> /dev/null 2>&1; then
-    echo "Installing offline .deb packages..."
+    echo "✅ Found .deb packages. Installing offline .deb packages..."
     $SUDO dpkg -i /test-env/artifacts/*.deb || true
     $SUDO apt-get install -f -y
 else
-    echo "Warning: No .deb packages found! Skipping offline installation."
+    echo "⚠️ Warning: No .deb packages found in /test-env/artifacts/! Skipping offline installation."
 fi
 
 EOF
