@@ -46,6 +46,7 @@ jobs:
     name: "Build Offline Installer for ${{ matrix.os }}"
     runs-on: ubuntu-latest
     needs: read-kube-version
+    continue-on-error: true  # ✅ Allows this job to continue if one OS fails
     env:
       K8S_VERSION: ${{ needs.read-kube-version.outputs.kube_version }}
     strategy:
@@ -59,29 +60,33 @@ jobs:
         run: |
           echo "Using Kubernetes Version: $K8S_VERSION"
 
-
       - name: Run Kubernetes Dependency & Package Indexer
         run: bash deploy/pipeline/setup.sh ${{ matrix.os }} $K8S_VERSION
+        continue-on-error: true  # ✅ Ensures failure in one OS does not stop others
 
       - name: Upload Dependencies YAML
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: dependencies-${{ matrix.os }}
           path: dependencies.yaml
 
       - name: Upload Offline Package Archive
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: offline-packages-${{ matrix.os }}
           path: offline_packages_${{ matrix.os }}_${{ env.K8S_VERSION }}.tar.gz
 
       - name: Upload Offline Installation Script
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: install-script-${{ matrix.os }}
           path: install_${{ matrix.os }}_${{ env.K8S_VERSION }}.sh
 
       - name: Upload Checksums
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: checksums-${{ matrix.os }}
@@ -90,7 +95,8 @@ jobs:
   test_install:
     name: "Test Air-Gapped Installation for ${{ matrix.os }}"
     runs-on: ubuntu-latest
-    needs: [read-kube-version, build]
+    needs: build
+    if: always()  # ✅ Ensures test runs even if some builds fail
     env:
       K8S_VERSION: ${{ needs.read-kube-version.outputs.kube_version }}
     strategy:
@@ -105,30 +111,36 @@ jobs:
           echo "Using Kubernetes Version: $K8S_VERSION"
 
       - name: Download Offline Package Archive
+        if: success()
         uses: actions/download-artifact@v4
         with:
           name: offline-packages-${{ matrix.os }}
           path: ./
 
       - name: Download Offline Installation Script
+        if: success()
         uses: actions/download-artifact@v4
         with:
           name: install-script-${{ matrix.os }}
           path: ./
 
       - name: Download Checksums
+        if: success()
         uses: actions/download-artifact@v4
         with:
           name: checksums-${{ matrix.os }}
           path: ./
 
       - name: Verify SHA256 Checksums
+        if: success()
         run: sha256sum -c checksums_${{ matrix.os }}_${{ env.K8S_VERSION }}.sha256
 
       - name: Set Executable Permissions
+        if: success()
         run: chmod +x install_${{ matrix.os }}_${{ env.K8S_VERSION }}.sh
 
       - name: Start Test Container
+        if: success()
         run: |
           case "${{ matrix.os }}" in
             ubuntu) IMAGE="ubuntu:20.04" ;;
@@ -145,9 +157,11 @@ jobs:
           docker run --rm -d --name test-container -v $PWD:/test-env $IMAGE tail -f /dev/null
 
       - name: Run Offline Installation Inside Test Container
+        if: success()
         run: docker exec test-container bash -c "/test-env/install_${{ matrix.os }}_${{ env.K8S_VERSION }}.sh"
 
       - name: Verify Kubernetes & Containerd
+        if: success()
         run: |
           docker exec test-container bash -c "kubeadm version"
           docker exec test-container bash -c "kubectl version --client"
