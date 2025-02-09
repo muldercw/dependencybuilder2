@@ -11,23 +11,23 @@ jobs:
     name: "Read Kubernetes Version"
     runs-on: ubuntu-latest
     outputs:
-      kube_version: ${{ steps.read_version.outputs.kube_version }}
+      kube_version: ${{ steps.read_version.outputs.kube_version }}  # ✅ Make sure this matches `id: read_version`
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-
+  
       - name: Check if kubeversion.yaml Exists
         run: |
           if [[ ! -f deploy/pipeline/kubeversion.yaml ]]; then
             echo "Error: kubeversion.yaml is missing!"
             exit 1
           fi
-
+  
       - name: Debug kubeversion.yaml
         run: cat deploy/pipeline/kubeversion.yaml
-
+  
       - name: Read Kubernetes Version from YAML
-        id: read_version
+        id: read_version  # ✅ This must match the output reference above
         run: |
           KUBE_VERSION=$(grep 'kubernetes_version:' deploy/pipeline/kubeversion.yaml | awk '{print $2}' | tr -d '[:space:]')
           if [[ -z "$KUBE_VERSION" ]]; then
@@ -35,12 +35,13 @@ jobs:
             exit 1
           fi
           echo "kube_version=$KUBE_VERSION" >> "$GITHUB_ENV"
-          echo "kube_version=$KUBE_VERSION" >> "$GITHUB_OUTPUT"  # ✅ FIXED
-
+          echo "kube_version=$KUBE_VERSION" >> "$GITHUB_OUTPUT"  # ✅ Use GITHUB_OUTPUT correctly
+  
       - name: Debug K8S Version
         run: |
           echo "Extracted KUBE_VERSION: $KUBE_VERSION"
           echo "Stored in GITHUB_ENV: ${{ env.kube_version }}"
+
 
 
   build:
