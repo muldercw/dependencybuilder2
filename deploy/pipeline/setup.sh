@@ -110,10 +110,18 @@ find /test-env/artifacts/ -type f
 # 🔎 Locate the `.deb` package directory dynamically
 DEB_DIR=$(find /test-env/artifacts/ -type d -path "*/var/cache/apt/archives" | head -n 1)
 
-# 🔥 If directory is not found, show error and exit
+# 🔥 If directory is not found, **manually set** it based on observed structure
 if [[ -z "$DEB_DIR" || ! -d "$DEB_DIR" ]]; then
-    echo "❌ ERROR: Could not locate the .deb package directory!"
-    exit 1
+    echo "⚠️ Warning: Could not auto-detect .deb package directory!"
+    echo "🔍 Attempting manual assignment..."
+    
+    if [[ -d "/test-env/artifacts/var/cache/apt/archives" ]]; then
+        DEB_DIR="/test-env/artifacts/var/cache/apt/archives"
+        echo "✅ Manually assigned DEB_DIR=$DEB_DIR"
+    else
+        echo "❌ ERROR: .deb package directory is missing!"
+        exit 1
+    fi
 fi
 
 echo "📦 Found .deb package directory: $DEB_DIR"
