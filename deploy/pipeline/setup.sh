@@ -107,55 +107,45 @@ fi
 echo "📂 Listing all files in /test-env/artifacts/ before installation:"
 find /test-env/artifacts/ -type f
 
-# 🔎 Locate the `.deb` package directory dynamically
-DEB_DIR=$(find /test-env/artifacts/ -type d -path "*/var/cache/apt/archives" | head -n 1)
+# 🔎 **Manually Assign the Expected Directory**
+EXPECTED_DEB_DIR="/test-env/artifacts/var/cache/apt/archives"
 
-# 🛑 Validate the detected DEB_DIR
-if [[ -z "$DEB_DIR" || ! -d "$DEB_DIR" ]]; then
-    echo "⚠️ Warning: Could not auto-detect .deb package directory!"
-    echo "🔍 Attempting manual assignment..."
-    
-    # ✅ Hardcode known location based on our debug outputs
-    if [[ -d "/test-env/artifacts/var/cache/apt/archives" ]]; then
-        DEB_DIR="/test-env/artifacts/var/cache/apt/archives"
-        echo "✅ Manually assigned DEB_DIR=$DEB_DIR"
-    else
-        echo "❌ ERROR: .deb package directory is missing!"
-        exit 1
-    fi
-fi
-
-echo "📦 Found .deb package directory: $DEB_DIR"
-
-# 🔍 Locate all `.deb` files in the directory
-DEB_FILES=$(find "$DEB_DIR" -maxdepth 1 -type f -name "*.deb")
-
-# 🛑 If no `.deb` files are found, print error and exit
-if [[ -z "$DEB_FILES" ]]; then
-    echo "⚠️ ERROR: No .deb packages found in $DEB_DIR!"
-    echo "🔍 Retrying with manual listing:"
-    ls -lah "$DEB_DIR" || echo "❌ ERROR: Could not access directory!"
+# **Validate if Directory Exists**
+if [[ -d "$EXPECTED_DEB_DIR" ]]; then
+    DEB_DIR="$EXPECTED_DEB_DIR"
+    echo "✅ Using manually assigned DEB_DIR: $DEB_DIR"
+else
+    echo "❌ ERROR: Expected package directory $EXPECTED_DEB_DIR does not exist!"
     exit 1
 fi
 
-# 📦 Print found .deb files before installation
+# **Find All `.deb` Files**
+DEB_FILES=$(find "$DEB_DIR" -maxdepth 1 -type f -name "*.deb")
+
+# 🛑 **If no `.deb` files are found, exit with an error**
+if [[ -z "$DEB_FILES" ]]; then
+    echo "⚠️ ERROR: No .deb packages found in $DEB_DIR!"
+    ls -lah "$DEB_DIR" || echo "❌ ERROR: Could not list directory contents!"
+    exit 1
+fi
+
+# 📦 **Print Found .deb Files**
 echo "📝 Found the following .deb files:"
 for FILE in $DEB_FILES; do
     echo "  - $FILE"
 done
 
-# 🚀 Install each `.deb` package
+# 🚀 **Install Each `.deb` Package**
 for FILE in $DEB_FILES; do
     echo "📦 Installing: $FILE"
     $SUDO dpkg -i "$FILE" || true  # Continue even if dependencies are missing
 done
 
-# 🔧 Fix missing dependencies
+# 🔧 **Fix Any Missing Dependencies**
 echo "🔧 Resolving dependencies..."
 $SUDO apt-get install -f -y
 
 echo "✅ Installation complete!"
-
 
 EOF
 
