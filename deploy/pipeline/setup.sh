@@ -92,8 +92,21 @@ echo "Generating installation script: $INSTALL_SCRIPT"
 cat <<EOF > "$INSTALL_SCRIPT"
 #!/bin/bash
 set -e
-echo "Installing offline Kubernetes for $OS (v$K8S_VERSION)"
-dpkg -i /var/cache/apt/archives/*.deb || rpm -Uvh --force /var/cache/dnf/packages/*.rpm || pacman -U --noconfirm /var/cache/pacman/pkg/*.pkg.tar.zst
+echo "Installing offline Kubernetes for ubuntu (v${K8S_VERSION})"
+# Detect if running inside a container
+if [ -f /.dockerenv ]; then
+    echo "Detected container environment. Running without sudo..."
+    SUDO=""
+else
+    SUDO="sudo"
+fi
+# Ensure local APT cache directory exists
+$SUDO mkdir -p /var/cache/apt/archives
+# Copy offline package files to APT cache
+$SUDO cp /test-env/artifacts/*.deb /var/cache/apt/archives/
+# Install offline packages
+$SUDO dpkg -i /var/cache/apt/archives/*.deb || true
+$SUDO apt-get install -f -y
 EOF
 
 chmod +x "$INSTALL_SCRIPT"
