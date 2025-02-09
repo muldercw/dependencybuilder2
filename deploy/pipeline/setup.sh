@@ -7,7 +7,10 @@ K8S_VERSION=$2
 # 🔧 Strip any extra quotes around the Kubernetes version
 K8S_VERSION=$(echo "$K8S_VERSION" | tr -d '"')
 
-echo "Starting setup for OS: $OS with Kubernetes version: $K8S_VERSION"
+# 🔧 Extract only major.minor version for repo setup (e.g., "1.29" from "1.29.13")
+K8S_MAJOR_MINOR=$(echo "$K8S_VERSION" | cut -d'.' -f1,2)
+
+echo "Starting setup for OS: $OS with Kubernetes version: $K8S_VERSION (Repo version: $K8S_MAJOR_MINOR)"
 
 # Validate Kubernetes Version
 if [[ -z "$K8S_VERSION" ]]; then
@@ -54,11 +57,11 @@ elif [[ "$PKG_MANAGER" == "pacman" && ! -x "$(command -v pacman)" ]]; then
 fi
 
 # Validate Kubernetes repository URL before proceeding
-KUBE_URL="https://pkgs.k8s.io/core:/stable:/v${K8S_VERSION}/deb/Release.key"
+KUBE_URL="https://pkgs.k8s.io/core:/stable:/v${K8S_MAJOR_MINOR}/deb/Release.key"
 
 if ! curl -IfsSL "$KUBE_URL"; then
     echo "Error: The Kubernetes repository URL returned 403 Forbidden!"
-    echo "Check if Kubernetes version '$K8S_VERSION' exists."
+    echo "Check if Kubernetes version '$K8S_MAJOR_MINOR' exists."
     exit 1
 fi
 
@@ -73,7 +76,7 @@ if [[ "$PKG_MANAGER" == "apt" ]]; then
     curl -fsSL "$KUBE_URL" | sudo gpg --dearmor --batch --yes -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
     sudo chmod 644 /etc/apt/keyrings/kubernetes-apt-keyring.gpg
 
-    echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v${K8S_VERSION}/deb/ /" | sudo tee /etc/apt/sources.list.d/kubernetes.list
+    echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v${K8S_MAJOR_MINOR}/deb/ /" | sudo tee /etc/apt/sources.list.d/kubernetes.list
     sudo chmod 644 /etc/apt/sources.list.d/kubernetes.list
     sudo apt-get update -y
 fi
@@ -82,8 +85,8 @@ fi
 echo "Installing Kubernetes components for $OS..."
 
 if [[ "$PKG_MANAGER" == "apt" ]]; then
-    # ✅ Ensure all components use the same version
-    sudo apt-get install -y kubeadm=${K8S_VERSION}-1.1 kubelet=${K8S_VERSION}-1.1 kubectl=${K8S_VERSION}-1.1
+    # ✅ Ensure all components use the correct version
+    sudo apt-get install -y kubeadm=${K8S_VERSION}-00 kubelet=${K8S_VERSION}-00 kubectl=${K8S_VERSION}-00
 
     # ✅ Check available versions
     echo "Checking installed Kubernetes component versions..."
