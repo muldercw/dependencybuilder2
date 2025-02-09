@@ -38,6 +38,14 @@ fi
 PKG_MANAGER="${OS_MAP[$OS]}"
 INSTALL_CMD="${INSTALL_CMDS[$PKG_MANAGER]}"
 
+# Ensure `dnf` is installed for Red Hat-based systems
+if [[ "$PKG_MANAGER" == "dnf" ]]; then
+    if ! command -v dnf &> /dev/null; then
+        echo "dnf is missing! Installing dnf..."
+        sudo yum install -y dnf || sudo apt install -y dnf || sudo pacman -Sy --noconfirm dnf || echo "Could not install dnf!"
+    fi
+fi
+
 # Add Kubernetes repository
 echo "Adding Kubernetes repository for $OS..."
 
@@ -45,31 +53,35 @@ if [[ "$PKG_MANAGER" == "apt" ]]; then
     sudo apt-get update
     sudo apt-get install -y apt-transport-https ca-certificates curl gnupg
 
-    # Create keyring directory if it doesn't exist
     sudo mkdir -p -m 755 /etc/apt/keyrings
+    echo "Validating Kubernetes repository URL..."
+    
+    KUBE_URL="https://pkgs.k8s.io/core:/stable:/v${K8S_VERSION}/deb/Release.key"
 
-    # Use `--no-tty` to fix GPG error
-    curl -fsSL "https://pkgs.k8s.io/core:/stable:/v${K8S_VERSION}/deb/Release.key" | sudo gpg --dearmor --no-tty -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+    if ! curl -IfsSL "$KUBE_URL"; then
+        echo "Error: The Kubernetes repository URL returned 403 Forbidden!"
+        echo "Check if Kubernetes version '$K8S_VERSION' exists."
+        exit 1
+    fi
+
+    echo "Downloading Kubernetes repository key..."
+    curl -fsSL "$KUBE_URL" | sudo gpg --dearmor --batch --yes -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
     sudo chmod 644 /etc/apt/keyrings/kubernetes-apt-keyring.gpg
 
-    # Fix repository URL and use the correct version
     echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v${K8S_VERSION}/deb/ /" | sudo tee /etc/apt/sources.list.d/kubernetes.list
     sudo chmod 644 /etc/apt/sources.list.d/kubernetes.list
     sudo apt-get update -y
 
 elif [[ "$PKG_MANAGER" == "dnf" ]]; then
-    # Ensure the directory exists to fix "No such file or directory" error
     sudo mkdir -p /etc/yum.repos.d
     echo -e "[kubernetes]\nname=Kubernetes\nbaseurl=https://pkgs.k8s.io/core:/stable:/v${K8S_VERSION}/rpm/\nenabled=1\ngpgcheck=1\nrepo_gpgcheck=1\ngpgkey=https://pkgs.k8s.io/core:/stable:/v${K8S_VERSION}/rpm/repodata/repomd.xml.key" | sudo tee /etc/yum.repos.d/kubernetes.repo
-
     sudo dnf makecache
 
 elif [[ "$PKG_MANAGER" == "pacman" ]]; then
     sudo pacman-key --init
     sudo pacman-key --recv-keys 3E1BA8D5E6EBF356
     sudo pacman-key --lsign-key 3E1BA8D5E6EBF356
-    echo "[kubernetes]
-Server = https://pkgs.k8s.io/core:/stable:/v${K8S_VERSION}/arch/" | sudo tee -a /etc/pacman.conf
+    echo "[kubernetes]\nServer = https://pkgs.k8s.io/core:/stable:/v${K8S_VERSION}/arch/" | sudo tee -a /etc/pacman.conf
     sudo pacman -Sy --noconfirm
 
 elif [[ "$PKG_MANAGER" == "zypper" ]]; then
@@ -141,6 +153,3 @@ echo "Installation script created: $INSTALL_SCRIPT"
 # Generate SHA256 checksum
 sha256sum $ARCHIVE_FILE $INSTALL_SCRIPT > $CHECKSUM_FILE
 echo "Checksums generated: $CHECKSUM_FILE"
-
-# Cleanup
-docker stop kube-container
