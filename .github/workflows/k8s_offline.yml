@@ -134,13 +134,17 @@ jobs:
           path: artifacts/
 
       - name: Verify SHA256 Checksums
+        env:
+          K8S_VERSION: ${{ needs.read-kube-version.outputs.kube_version }}
         run: |
-          CHECKSUM_FILE="artifacts/checksums_${{ matrix.os }}_${{ env.K8S_VERSION }}.sha256"
+          CHECKSUM_FILE="artifacts/checksums_${{ matrix.os }}_${K8S_VERSION}.sha256"
           if [[ -f "$CHECKSUM_FILE" ]]; then
+            echo "Verifying checksum for $CHECKSUM_FILE..."
             sha256sum -c "$CHECKSUM_FILE"
           else
-            echo "Warning: Checksum file not found for ${{ matrix.os }}. Skipping verification."
+            echo "Warning: Checksum file $CHECKSUM_FILE not found for ${{ matrix.os }}. Skipping verification."
           fi
+
 
       - name: Set Executable Permissions
         if: success()
