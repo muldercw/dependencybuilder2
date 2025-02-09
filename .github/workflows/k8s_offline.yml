@@ -97,7 +97,7 @@ jobs:
     name: "Test Air-Gapped Installation for ${{ matrix.os }}"
     runs-on: ubuntu-latest
     needs: [read-kube-version, build]
-    continue-on-error: true  # ✅ Allows independent OS testing
+    continue-on-error: true
     env:
       K8S_VERSION: ${{ needs.read-kube-version.outputs.kube_version }}
     strategy:
@@ -106,55 +106,9 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-  
-      - name: Debug K8S Version
-        run: | 
-          echo "Using Kubernetes Version: $K8S_VERSION"
-  
-      - name: Ensure Artifacts Directory Exists
-        run: mkdir -p artifacts/
-  
-      - name: Download and Extract Offline Package Archive
-        uses: actions/download-artifact@v4
-        with:
-          name: offline-packages-${{ matrix.os }}
-          path: artifacts/
-      
-      - name: Extract Offline Package Archive
-        run: unzip -o artifacts/offline-packages-${{ matrix.os }}.zip -d artifacts/ || echo "No extraction needed"
-      
-      - name: Download and Extract Offline Installation Script
-        uses: actions/download-artifact@v4
-        with:
-          name: install-script-${{ matrix.os }}
-          path: artifacts/
-      
-      - name: Extract Offline Installation Script
-        run: unzip -o artifacts/install-script-${{ matrix.os }}.zip -d artifacts/ || echo "No extraction needed"
-      
-      - name: Download and Extract Checksums
-        uses: actions/download-artifact@v4
-        with:
-          name: checksums-${{ matrix.os }}
-          path: artifacts/
-      
-      - name: Extract Checksums
-        run: unzip -o artifacts/checksums-${{ matrix.os }}.zip -d artifacts/ || echo "No extraction needed"
 
-  
-      - name: Verify SHA256 Checksums
-        run: |
-          echo "Expected checksum file: artifacts/checksums_${{ matrix.os }}_${K8S_VERSION}.sha256"
-          if [[ -f "artifacts/checksums_${{ matrix.os }}_${K8S_VERSION}.sha256" ]]; then
-            echo "Verifying checksum for ${{ matrix.os }}..."
-            sha256sum -c "artifacts/checksums_${{ matrix.os }}_${K8S_VERSION}.sha256"
-          else
-            echo "Warning: Checksum file artifacts/checksums_${{ matrix.os }}_${K8S_VERSION}.sha256 not found. Skipping verification."
-          fi
-
-      - name: Set Executable Permissions
-        if: success()
-        run: chmod +x artifacts/install_${{ matrix.os }}_${{ env.K8S_VERSION }}.sh
+      - name: Debug List Local Artifacts Directory Before Running Container
+        run: ls -lah artifacts/
 
       - name: Start Test Container
         if: success()
@@ -172,6 +126,9 @@ jobs:
           esac
           echo "Starting test container for ${{ matrix.os }}..."
           docker run --rm -d --name test-container -v $PWD/artifacts:/test-env/artifacts $IMAGE tail -f /dev/null
+
+      - name: Debug List Files Inside Test Container Before Installation
+        run: docker exec test-container bash -c "ls -lah /test-env/artifacts/"
 
       - name: Run Offline Installation Inside Test Container
         if: success()
