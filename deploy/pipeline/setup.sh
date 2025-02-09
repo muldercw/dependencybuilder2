@@ -92,7 +92,9 @@ echo "Generating installation script: $INSTALL_SCRIPT"
 cat <<EOF > "$INSTALL_SCRIPT"
 #!/bin/bash
 set -e
+
 echo "Installing offline Kubernetes for ubuntu (v${K8S_VERSION})"
+
 # Detect if running inside a container
 if [ -f /.dockerenv ]; then
     echo "Detected container environment. Running without sudo..."
@@ -100,13 +102,16 @@ if [ -f /.dockerenv ]; then
 else
     SUDO="sudo"
 fi
-# Ensure local APT cache directory exists
-$SUDO mkdir -p /var/cache/apt/archives
-# Copy offline package files to APT cache
-$SUDO cp /test-env/artifacts/*.deb /var/cache/apt/archives/
-# Install offline packages
-$SUDO dpkg -i /var/cache/apt/archives/*.deb || true
-$SUDO apt-get install -f -y
+
+# Ensure extracted packages exist before installing
+if ls /test-env/artifacts/*.deb 1> /dev/null 2>&1; then
+    echo "Installing offline .deb packages..."
+    $SUDO dpkg -i /test-env/artifacts/*.deb || true
+    $SUDO apt-get install -f -y
+else
+    echo "Warning: No .deb packages found! Skipping offline installation."
+fi
+
 EOF
 
 chmod +x "$INSTALL_SCRIPT"
