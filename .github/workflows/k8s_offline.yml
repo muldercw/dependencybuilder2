@@ -35,6 +35,7 @@ jobs:
             exit 1
           fi
           echo "kube_version=$KUBE_VERSION" >> $GITHUB_ENV
+          echo "::set-output name=kube_version::$KUBE_VERSION"
 
       - name: Debug K8S Version
         run: |
@@ -48,12 +49,17 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu, debian, almalinux, centos, rocky, fedora, arch, opensuse]
+    env:
+      K8S_VERSION: ${{ needs.read-kube-version.outputs.kube_version }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      - name: Debug K8S Version
+        run: echo "Using Kubernetes Version: $K8S_VERSION"
+
       - name: Run Kubernetes Dependency & Package Indexer
-        run: bash deploy/pipeline/setup.sh ${{ matrix.os }} ${{ env.kube_version }}
+        run: bash deploy/pipeline/setup.sh ${{ matrix.os }} $K8S_VERSION
 
       - name: Upload Dependencies YAML
         uses: actions/upload-artifact@v4
@@ -65,19 +71,19 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: offline-packages-${{ matrix.os }}
-          path: offline_packages_${{ matrix.os }}_${{ env.kube_version }}.tar.gz
+          path: offline_packages_${{ matrix.os }}_${{ env.K8S_VERSION }}.tar.gz
 
       - name: Upload Offline Installation Script
         uses: actions/upload-artifact@v4
         with:
           name: install-script-${{ matrix.os }}
-          path: install_${{ matrix.os }}_${{ env.kube_version }}.sh
+          path: install_${{ matrix.os }}_${{ env.K8S_VERSION }}.sh
 
       - name: Upload Checksums
         uses: actions/upload-artifact@v4
         with:
           name: checksums-${{ matrix.os }}
-          path: checksums_${{ matrix.os }}_${{ env.kube_version }}.sha256
+          path: checksums_${{ matrix.os }}_${{ env.K8S_VERSION }}.sha256
 
   test_install:
     name: "Test Air-Gapped Installation for ${{ matrix.os }}"
@@ -86,7 +92,15 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu, debian, almalinux, centos, rocky, fedora, arch, opensuse]
+    env:
+      K8S_VERSION: ${{ needs.read-kube-version.outputs.kube_version }}
     steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Debug K8S Version
+        run: echo "Using Kubernetes Version: $K8S_VERSION"
+
       - name: Download Offline Package Archive
         uses: actions/download-artifact@v4
         with:
@@ -106,10 +120,10 @@ jobs:
           path: ./
 
       - name: Verify SHA256 Checksums
-        run: sha256sum -c checksums_${{ matrix.os }}_${{ env.kube_version }}.sha256
+        run: sha256sum -c checksums_${{ matrix.os }}_${{ env.K8S_VERSION }}.sha256
 
       - name: Set Executable Permissions
-        run: chmod +x install_${{ matrix.os }}_${{ env.kube_version }}.sh
+        run: chmod +x install_${{ matrix.os }}_${{ env.K8S_VERSION }}.sh
 
       - name: Start Test Container
         run: |
@@ -128,7 +142,7 @@ jobs:
           docker run --rm -d --name test-container -v $PWD:/test-env $IMAGE tail -f /dev/null
 
       - name: Run Offline Installation Inside Test Container
-        run: docker exec test-container bash -c "/test-env/install_${{ matrix.os }}_${{ env.kube_version }}.sh"
+        run: docker exec test-container bash -c "/test-env/install_${{ matrix.os }}_${{ env.K8S_VERSION }}.sh"
 
       - name: Verify Kubernetes & Containerd
         run: |
