@@ -77,20 +77,21 @@ jobs:
         with:
           name: offline-packages-${{ matrix.os }}
           path: artifacts/offline_packages_${{ matrix.os }}_${{ env.K8S_VERSION }}.tar.gz
-
+      
       - name: Upload Offline Installation Script
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: install-script-${{ matrix.os }}
           path: artifacts/install_${{ matrix.os }}_${{ env.K8S_VERSION }}.sh
-
+      
       - name: Upload Checksums
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: checksums-${{ matrix.os }}
           path: artifacts/checksums_${{ matrix.os }}_${{ env.K8S_VERSION }}.sha256
+
 
   test_install:
     name: "Test Air-Gapped Installation for ${{ matrix.os }}"
