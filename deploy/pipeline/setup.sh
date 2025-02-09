@@ -107,12 +107,16 @@ fi
 echo "📂 Listing all files and subdirectories in /test-env/artifacts/ before installation:"
 ls -lahR /test-env/artifacts/
 
-# 🛠 Ensure the correct directory exists before searching
-DEB_DIR="/test-env/artifacts/var/cache/apt/archives"
-if [[ ! -d "$DEB_DIR" ]]; then
-    echo "❌ Error: Expected package directory $DEB_DIR does not exist!"
+# 🔍 Define correct DEB package directory
+DEB_DIR=$(find /test-env/artifacts/ -type d -path "*/var/cache/apt/archives" | head -n 1)
+
+# 🛠 Ensure the correct directory is found
+if [[ -z "$DEB_DIR" || ! -d "$DEB_DIR" ]]; then
+    echo "❌ Error: Could not locate the .deb package directory!"
     exit 1
 fi
+
+echo "📦 Using package directory: $DEB_DIR"
 
 # 🔎 Search for .deb packages in the correct directory
 echo "🔎 Searching for .deb packages in $DEB_DIR ..."
@@ -141,6 +145,7 @@ done
 # 🔧 Fix missing dependencies
 echo "🔧 Resolving dependencies..."
 $SUDO apt-get install -f -y
+
 
 EOF
 
