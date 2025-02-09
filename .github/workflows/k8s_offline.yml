@@ -96,9 +96,8 @@ jobs:
   test_install:
     name: "Test Air-Gapped Installation for ${{ matrix.os }}"
     runs-on: ubuntu-latest
-    continue-on-error: true
-    needs: build
-    if: always()  # ✅ Ensures test runs even if some builds fail
+    needs: [read-kube-version, build]
+    continue-on-error: true  # ✅ Allows independent OS testing
     env:
       K8S_VERSION: ${{ needs.read-kube-version.outputs.kube_version }}
     strategy:
@@ -107,44 +106,29 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-
+  
       - name: Debug K8S Version
         run: | 
           echo "Using Kubernetes Version: $K8S_VERSION"
-
-      - name: Download Offline Package Archive
-        if: success()
-        uses: actions/download-artifact@v4
-        with:
-          name: offline-packages-${{ matrix.os }}
-          path: artifacts/
-
-      - name: Download Offline Installation Script
-        if: success()
-        uses: actions/download-artifact@v4
-        with:
-          name: install-script-${{ matrix.os }}
-          path: artifacts/
-
+  
+      - name: Ensure Artifacts Directory Exists
+        run: mkdir -p artifacts/
+  
       - name: Download Checksums
-        if: success()
         uses: actions/download-artifact@v4
         with:
           name: checksums-${{ matrix.os }}
           path: artifacts/
-
+  
       - name: Verify SHA256 Checksums
-        env:
-          K8S_VERSION: ${{ needs.read-kube-version.outputs.kube_version }}
         run: |
-          CHECKSUM_FILE="artifacts/checksums_${{ matrix.os }}_${K8S_VERSION}.sha256"
-          if [[ -f "$CHECKSUM_FILE" ]]; then
-            echo "Verifying checksum for $CHECKSUM_FILE..."
-            sha256sum -c "$CHECKSUM_FILE"
+          echo "Expected checksum file: artifacts/checksums_${{ matrix.os }}_${K8S_VERSION}.sha256"
+          if [[ -f "artifacts/checksums_${{ matrix.os }}_${K8S_VERSION}.sha256" ]]; then
+            echo "Verifying checksum for ${{ matrix.os }}..."
+            sha256sum -c "artifacts/checksums_${{ matrix.os }}_${K8S_VERSION}.sha256"
           else
-            echo "Warning: Checksum file $CHECKSUM_FILE not found for ${{ matrix.os }}. Skipping verification."
+            echo "Warning: Checksum file artifacts/checksums_${{ matrix.os }}_${K8S_VERSION}.sha256 not found. Skipping verification."
           fi
-
 
       - name: Set Executable Permissions
         if: success()
