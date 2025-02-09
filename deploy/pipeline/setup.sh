@@ -38,12 +38,22 @@ fi
 PKG_MANAGER="${OS_MAP[$OS]}"
 INSTALL_CMD="${INSTALL_CMDS[$PKG_MANAGER]}"
 
-# Ensure `dnf` is installed for Red Hat-based systems
-if [[ "$PKG_MANAGER" == "dnf" ]]; then
-    if ! command -v dnf &> /dev/null; then
-        echo "dnf is missing! Installing dnf..."
-        sudo yum install -y dnf || sudo apt install -y dnf || sudo pacman -Sy --noconfirm dnf || echo "Could not install dnf!"
-    fi
+# Ensure required package managers are installed
+if [[ "$PKG_MANAGER" == "dnf" ]] && ! command -v dnf &> /dev/null; then
+    echo "dnf is missing! Installing..."
+    sudo yum install -y dnf || sudo apt install -y dnf || echo "Could not install dnf!"
+elif [[ "$PKG_MANAGER" == "zypper" ]] && ! command -v zypper &> /dev/null; then
+    echo "zypper is missing! Installing..."
+    sudo apt install -y zypper || sudo pacman -Sy --noconfirm zypper || echo "Could not install zypper!"
+elif [[ "$PKG_MANAGER" == "pacman" ]] && ! command -v pacman &> /dev/null; then
+    echo "pacman is missing! Installing..."
+    sudo apt install -y pacman || echo "Could not install pacman!"
+fi
+
+# Validate Kubernetes Version Before Proceeding
+if [[ -z "$K8S_VERSION" ]]; then
+    echo "Error: Kubernetes version is not set! Check your kubeversion.yaml file."
+    exit 1
 fi
 
 # Add Kubernetes repository
@@ -77,79 +87,44 @@ elif [[ "$PKG_MANAGER" == "dnf" ]]; then
     echo -e "[kubernetes]\nname=Kubernetes\nbaseurl=https://pkgs.k8s.io/core:/stable:/v${K8S_VERSION}/rpm/\nenabled=1\ngpgcheck=1\nrepo_gpgcheck=1\ngpgkey=https://pkgs.k8s.io/core:/stable:/v${K8S_VERSION}/rpm/repodata/repomd.xml.key" | sudo tee /etc/yum.repos.d/kubernetes.repo
     sudo dnf makecache
 
+elif [[ "$PKG_MANAGER" == "zypper" ]]; then
+    sudo mkdir -p /etc/zypp/repos.d
+    echo "[kubernetes]
+name=Kubernetes
+baseurl=https://pkgs.k8s.io/core:/stable:/v${K8S_VERSION}/rpm/
+enabled=1
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://pkgs.k8s.io/core:/stable:/v${K8S_VERSION}/rpm/repodata/repomd.xml.key" | sudo tee /etc/zypp/repos.d/kubernetes.repo
+    sudo zypper refresh
+
 elif [[ "$PKG_MANAGER" == "pacman" ]]; then
     sudo pacman-key --init
     sudo pacman-key --recv-keys 3E1BA8D5E6EBF356
     sudo pacman-key --lsign-key 3E1BA8D5E6EBF356
-    echo "[kubernetes]\nServer = https://pkgs.k8s.io/core:/stable:/v${K8S_VERSION}/arch/" | sudo tee -a /etc/pacman.conf
+    echo "[kubernetes]
+Server = https://pkgs.k8s.io/core:/stable:/v${K8S_VERSION}/arch/" | sudo tee -a /etc/pacman.conf
     sudo pacman -Sy --noconfirm
-
-elif [[ "$PKG_MANAGER" == "zypper" ]]; then
-    sudo zypper addrepo -g -f "https://pkgs.k8s.io/core:/stable:/v${K8S_VERSION}/rpm/" kubernetes
-    sudo zypper refresh
 fi
 
-# Create directory for offline package downloads
-mkdir -p $PKG_DIR
-
 # Download dependencies including containerd
+mkdir -p $PKG_DIR
 echo "Downloading dependencies for Kubernetes and containerd..."
 
 if [[ "$PKG_MANAGER" == "apt" ]]; then
     sudo apt install -y containerd kubeadm kubelet kubectl
     apt-get download kubeadm kubelet kubectl containerd -o Dir::Cache::Archives=./$PKG_DIR
 
-elif [[ "$PKG_MANAGER" == "dnf" ]]; then
-    sudo dnf install -y containerd kubeadm kubelet kubectl
-    dnf download --destdir=./$PKG_DIR containerd kubeadm kubelet kubectl
+elif [[ "$PKG_MANAGER" == "dnf" || "$PKG_MANAGER" == "zypper" ]]; then
+    sudo $PKG_MANAGER install -y containerd kubeadm kubelet kubectl
+    sudo $PKG_MANAGER download --destdir=./$PKG_DIR containerd kubeadm kubelet kubectl
 
 elif [[ "$PKG_MANAGER" == "pacman" ]]; then
     sudo pacman -Sy --noconfirm containerd kubeadm kubelet kubectl
     pacman -Sw --noconfirm --cachedir=./$PKG_DIR containerd kubeadm kubelet kubectl
-
-elif [[ "$PKG_MANAGER" == "zypper" ]]; then
-    sudo zypper install -y containerd kubeadm kubelet kubectl
-    zypper download -d --destdir=./$PKG_DIR containerd kubeadm kubelet kubectl
 fi
 
 # Archive the offline package directory
 tar -czvf $ARCHIVE_FILE -C $PKG_DIR .
 
 echo "Offline package archive created: $ARCHIVE_FILE"
-
-# Generate the offline installation script
-echo "#!/bin/bash
-set -e
-echo \"Starting offline installation for $OS with Kubernetes $K8S_VERSION...\"
-
-# Extract the package archive
-mkdir -p offline_packages
-tar -xzvf $ARCHIVE_FILE -C offline_packages
-
-# Install all downloaded packages
-echo \"Installing packages...\"
-sudo $INSTALL_CMD offline_packages/*.{deb,rpm,pkg.tar.zst}
-
-# Configure containerd
-echo \"Configuring containerd...\"
-mkdir -p /etc/containerd
-containerd config default > /etc/containerd/config.toml
-systemctl restart containerd
-systemctl enable containerd
-
-echo \"Installation complete.\"
-
-# Verify Kubernetes installation
-echo \"Verifying Kubernetes installation...\"
-kubeadm version
-kubectl version --client
-kubelet --version
-containerd --version
-" > $INSTALL_SCRIPT
-
-chmod +x $INSTALL_SCRIPT
-echo "Installation script created: $INSTALL_SCRIPT"
-
-# Generate SHA256 checksum
-sha256sum $ARCHIVE_FILE $INSTALL_SCRIPT > $CHECKSUM_FILE
-echo "Checksums generated: $CHECKSUM_FILE"
