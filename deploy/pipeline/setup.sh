@@ -3,6 +3,7 @@ set -e
 
 OS=$1
 K8S_VERSION=$2
+
 DEP_FILE="dependencies.yaml"
 PKG_DIR="offline_packages"
 ARCHIVE_FILE="offline_packages_${OS}_${K8S_VERSION}.tar.gz"
@@ -44,26 +45,23 @@ if [[ "$PKG_MANAGER" == "apt" ]]; then
     sudo apt-get update
     sudo apt-get install -y apt-transport-https ca-certificates curl gnupg
 
-    # Create keyring directory if needed
+    # Create keyring directory if it doesn't exist
     sudo mkdir -p -m 755 /etc/apt/keyrings
-    curl -fsSL https://pkgs.k8s.io/core:/stable:/v${K8S_VERSION}/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+    # Use `--no-tty` to fix GPG error
+    curl -fsSL "https://pkgs.k8s.io/core:/stable:/v${K8S_VERSION}/deb/Release.key" | sudo gpg --dearmor --no-tty -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
     sudo chmod 644 /etc/apt/keyrings/kubernetes-apt-keyring.gpg
 
-    # Add repository
+    # Fix repository URL and use the correct version
     echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v${K8S_VERSION}/deb/ /" | sudo tee /etc/apt/sources.list.d/kubernetes.list
     sudo chmod 644 /etc/apt/sources.list.d/kubernetes.list
     sudo apt-get update -y
 
 elif [[ "$PKG_MANAGER" == "dnf" ]]; then
-    sudo tee /etc/yum.repos.d/kubernetes.repo <<EOF
-[kubernetes]
-name=Kubernetes
-baseurl=https://pkgs.k8s.io/core:/stable:/v${K8S_VERSION}/rpm/
-enabled=1
-gpgcheck=1
-repo_gpgcheck=1
-gpgkey=https://pkgs.k8s.io/core:/stable:/v${K8S_VERSION}/rpm/repodata/repomd.xml.key
-EOF
+    # Ensure the directory exists to fix "No such file or directory" error
+    sudo mkdir -p /etc/yum.repos.d
+    echo -e "[kubernetes]\nname=Kubernetes\nbaseurl=https://pkgs.k8s.io/core:/stable:/v${K8S_VERSION}/rpm/\nenabled=1\ngpgcheck=1\nrepo_gpgcheck=1\ngpgkey=https://pkgs.k8s.io/core:/stable:/v${K8S_VERSION}/rpm/repodata/repomd.xml.key" | sudo tee /etc/yum.repos.d/kubernetes.repo
+
     sudo dnf makecache
 
 elif [[ "$PKG_MANAGER" == "pacman" ]]; then
@@ -75,7 +73,7 @@ Server = https://pkgs.k8s.io/core:/stable:/v${K8S_VERSION}/arch/" | sudo tee -a 
     sudo pacman -Sy --noconfirm
 
 elif [[ "$PKG_MANAGER" == "zypper" ]]; then
-    sudo zypper addrepo -g -f https://pkgs.k8s.io/core:/stable:/v${K8S_VERSION}/rpm/ kubernetes
+    sudo zypper addrepo -g -f "https://pkgs.k8s.io/core:/stable:/v${K8S_VERSION}/rpm/" kubernetes
     sudo zypper refresh
 fi
 
