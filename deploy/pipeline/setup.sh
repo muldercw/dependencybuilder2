@@ -140,7 +140,9 @@ done
 # 🔧 Fix missing dependencies
 echo "🔧 Resolving dependencies..."
 $SUDO apt-get install -f -y
+ech "try manual"
 
+$SUDO dpkg -i "/test-env/artifacts/var/cache/apt/archives/kubectl_1.29.13-1.1_amd64.deb" || true
 echo "✅ Installation complete!"
 
 EOF
