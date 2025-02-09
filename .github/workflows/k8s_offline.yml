@@ -14,7 +14,7 @@ jobs:
       kube_version: ${{ steps.read_version.outputs.kube_version }}
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Read Kubernetes Version from YAML
         id: read_version
@@ -31,31 +31,31 @@ jobs:
         os: [ubuntu, debian, almalinux, centos, rocky, fedora, arch, opensuse]
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Run Kubernetes Dependency & Package Indexer
         run: bash deploy/pipelines/setup.sh ${{ matrix.os }} ${{ env.kube_version }}
 
       - name: Upload Dependencies YAML
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: dependencies-${{ matrix.os }}
           path: dependencies.yaml
 
       - name: Upload Offline Package Archive
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: offline-packages-${{ matrix.os }}
           path: offline_packages_${{ matrix.os }}_${{ env.kube_version }}.tar.gz
 
       - name: Upload Offline Installation Script
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: install-script-${{ matrix.os }}
           path: install_${{ matrix.os }}_${{ env.kube_version }}.sh
 
       - name: Upload Checksums
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: checksums-${{ matrix.os }}
           path: checksums_${{ matrix.os }}_${{ env.kube_version }}.sha256
@@ -69,22 +69,22 @@ jobs:
         os: [ubuntu, debian, almalinux, centos, rocky, fedora, arch, opensuse]
     steps:
       - name: Download Offline Package Archive
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: offline-packages-${{ matrix.os }}
-          path: ./ 
+          path: ./
 
       - name: Download Offline Installation Script
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: install-script-${{ matrix.os }}
-          path: ./ 
+          path: ./
 
       - name: Download Checksums
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: checksums-${{ matrix.os }}
-          path: ./ 
+          path: ./
 
       - name: Verify SHA256 Checksums
         run: sha256sum -c checksums_${{ matrix.os }}_${{ env.kube_version }}.sha256
