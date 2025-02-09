@@ -114,8 +114,11 @@ cd /test-env/artifacts/ || { echo "❌ Error: Could not change to /test-env/arti
 echo "🔎 Searching for .deb packages in /test-env/artifacts/var/cache/apt/archives/ ..."
 find /test-env/artifacts/var/cache/apt/archives/ -type f -name "*.deb" -exec echo "  - Found: {}" \;
 
-# Store results in an array (fixing newline issues)
-IFS=$'\n' read -r -d '' -a DEB_FILES < <(find /test-env/artifacts/var/cache/apt/archives/ -type f -name "*.deb" -print0)
+# Store results in an array using a `while read` loop (fixes special character issues)
+DEB_FILES=()
+while IFS= read -r file; do
+    DEB_FILES+=("$file")
+done < <(find /test-env/artifacts/var/cache/apt/archives/ -type f -name "*.deb")
 
 # Debugging: Print all found .deb files with full paths
 echo "📝 Found the following .deb files:"
@@ -131,6 +134,7 @@ if [[ ${#DEB_FILES[@]} -gt 0 ]]; then
 else
     echo "⚠️ Warning: No .deb packages found! Skipping offline installation."
 fi
+
 
 EOF
 
