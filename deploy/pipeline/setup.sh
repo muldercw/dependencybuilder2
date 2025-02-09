@@ -107,8 +107,11 @@ fi
 echo "📂 Listing all files and subdirectories in /test-env/artifacts/ before installation:"
 ls -lahR /test-env/artifacts/
 
-# 🔎 Debug: Find all .deb files
+# 🔎 Debug: Force `find` to explicitly print every directory and check results
 echo "🔎 Searching for .deb packages..."
+find /test-env/artifacts/ -type f -name "*.deb" -exec echo "  - Found: {}" \;
+
+# Store results in an array
 readarray -t DEB_FILES < <(find /test-env/artifacts/ -type f -name "*.deb" 2>/dev/null)
 
 # Debugging: Print all found .deb files with full paths
