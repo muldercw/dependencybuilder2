@@ -93,59 +93,55 @@ cat <<EOF > "$INSTALL_SCRIPT"
 #!/bin/bash
 set -e
 
-echo "Installing offline Kubernetes for ubuntu (v${K8S_VERSION})"
+echo "🚀 Installing offline Kubernetes for ubuntu (v${K8S_VERSION})"
 
 # Detect if running inside a container
 if [ -f /.dockerenv ]; then
-    echo "Detected container environment. Running without sudo..."
+    echo "📦 Detected container environment. Running without sudo..."
     SUDO=""
 else
     SUDO="sudo"
 fi
 
-# 🔍 Debug: List all files in artifacts directory
+# 🗂 Print directory structure
 echo "📂 Listing all files and subdirectories in /test-env/artifacts/ before installation:"
-ls -lahR /test-env/artifacts/
+find /test-env/artifacts/ -type f
 
-# 🔍 Define correct DEB package directory
+# 🔎 Automatically find the correct `.deb` package directory
 DEB_DIR=$(find /test-env/artifacts/ -type d -path "*/var/cache/apt/archives" | head -n 1)
 
-# 🛠 Ensure the correct directory is found
+# 🔥 If directory is not found, show error and exit
 if [[ -z "$DEB_DIR" || ! -d "$DEB_DIR" ]]; then
-    echo "❌ Error: Could not locate the .deb package directory!"
+    echo "❌ ERROR: Could not locate the .deb package directory!"
     exit 1
 fi
 
 echo "📦 Using package directory: $DEB_DIR"
 
-# 🔎 Search for .deb packages in the correct directory
-echo "🔎 Searching for .deb packages in $DEB_DIR ..."
+# 🔍 Search for `.deb` packages
 DEB_FILES=$(find "$DEB_DIR" -type f -name "*.deb")
 
-# 🔍 Ensure we found valid .deb files
+# 🔥 If no .deb files are found, show error and exit
 if [[ -z "$DEB_FILES" ]]; then
-    echo "⚠️ Warning: No .deb packages found in $DEB_DIR! Skipping offline installation."
-    exit 0
+    echo "⚠️ ERROR: No .deb packages found in $DEB_DIR! Exiting..."
+    exit 1
 fi
 
 # 📦 Print found .deb files before installation
-echo "📦 Found the following .deb files:"
+echo "📝 Found the following .deb files:"
 echo "$DEB_FILES"
 
-# 🔽 Install each .deb package
-for file in $DEB_FILES; do
-    if [[ -f "$file" ]]; then
-        echo "📦 Installing: $file"
-        $SUDO dpkg -i "$file" || true  # Continue even if some dependencies are missing
-    else
-        echo "⚠️ Warning: Skipping invalid file path: '$file'"
-    fi
+# 🔽 Install each `.deb` package
+for FILE in $DEB_FILES; do
+    echo "📦 Installing: $FILE"
+    $SUDO dpkg -i "$FILE" || true  # Continue even if dependencies are missing
 done
 
 # 🔧 Fix missing dependencies
 echo "🔧 Resolving dependencies..."
 $SUDO apt-get install -f -y
 
+echo "✅ Installation complete!"
 
 EOF
 
