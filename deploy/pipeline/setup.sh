@@ -107,18 +107,19 @@ fi
 echo "📂 Listing all files and subdirectories in /test-env/artifacts/ before installation:"
 ls -lahR /test-env/artifacts/
 
-# Find all .deb files inside /test-env/artifacts/
+# 🔍 Debug: Find all .deb files
+echo "🔎 Searching for .deb packages..."
 DEB_FILES=$(find /test-env/artifacts/ -type f -name "*.deb")
 
 if [[ -n "$DEB_FILES" ]]; then
     echo "✅ Found the following .deb packages:"
     echo "$DEB_FILES"
-    
+
     echo "📦 Installing all found .deb packages..."
-    $SUDO dpkg -i $DEB_FILES || true
+    echo "$DEB_FILES" | xargs $SUDO dpkg -i || true
     $SUDO apt-get install -f -y
 else
-    echo "⚠️ Warning: No .deb packages found in /test-env/artifacts/! Skipping offline installation."
+    echo "⚠️ Warning: No .deb packages found! Skipping offline installation."
 fi
 
 EOF
