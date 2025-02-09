@@ -86,24 +86,24 @@ echo "Installing Kubernetes components for $OS..."
 
 if [[ "$PKG_MANAGER" == "apt" ]]; then
     # ✅ Ensure all components use the correct version
-    sudo apt-get install -y --allow-downgrades kubeadm=${K8S_VERSION}-1.1 kubelet=${K8S_VERSION}-1.1 kubectl=${K8S_VERSION}-1.1
+    sudo apt-get install -y --allow-downgrades kubeadm=${K8S_VERSION}-1.1 kubelet=${K8S_VERSION}-1.1 kubectl=${K8S_VERSION}-1.1 cri-tools conntrack
 
-    # ✅ Check available versions
+    # ✅ Check installed versions
     echo "Checking installed Kubernetes component versions..."
     kubeadm version
     kubectl version --client
     kubelet --version
 
 elif [[ "$PKG_MANAGER" == "dnf" ]]; then
-    sudo dnf install -y kubeadm-$K8S_VERSION kubelet-$K8S_VERSION kubectl-$K8S_VERSION
+    sudo dnf install -y kubeadm-$K8S_VERSION kubelet-$K8S_VERSION kubectl-$K8S_VERSION cri-tools conntrack
     sudo systemctl enable kubelet
 
 elif [[ "$PKG_MANAGER" == "pacman" ]]; then
-    sudo pacman -Sy --noconfirm kubeadm kubelet kubectl
+    sudo pacman -Sy --noconfirm kubeadm kubelet kubectl cri-tools conntrack-tools
     sudo systemctl enable kubelet
 
 elif [[ "$PKG_MANAGER" == "zypper" ]]; then
-    sudo zypper install -y kubeadm kubelet kubectl
+    sudo zypper install -y kubeadm kubelet kubectl cri-tools conntrack-tools
     sudo systemctl enable kubelet
 fi
 
@@ -113,5 +113,33 @@ sudo mkdir -p /etc/containerd
 containerd config default | sudo tee /etc/containerd/config.toml
 sudo systemctl restart containerd
 sudo systemctl enable containerd
+
+# ✅ Generate dependencies.yaml
+echo "Generating dependencies.yaml..."
+
+DEPENDENCIES_FILE="dependencies.yaml"
+
+echo "# Kubernetes Dependencies for $OS (K8S v$K8S_VERSION)" > "$DEPENDENCIES_FILE"
+echo "kubeadm: $K8S_VERSION" >> "$DEPENDENCIES_FILE"
+echo "kubelet: $K8S_VERSION" >> "$DEPENDENCIES_FILE"
+echo "kubectl: $K8S_VERSION" >> "$DEPENDENCIES_FILE"
+
+# ✅ Add OS-specific dependencies
+if [[ "$PKG_MANAGER" == "apt" ]]; then
+    echo "cri-tools: $(apt-cache madison cri-tools | head -n1 | awk '{print $3}')" >> "$DEPENDENCIES_FILE"
+    echo "conntrack: $(apt-cache madison conntrack | head -n1 | awk '{print $3}')" >> "$DEPENDENCIES_FILE"
+elif [[ "$PKG_MANAGER" == "dnf" ]]; then
+    echo "cri-tools: $(dnf list cri-tools --showduplicates | tail -n1 | awk '{print $2}')" >> "$DEPENDENCIES_FILE"
+    echo "conntrack: $(dnf list conntrack --showduplicates | tail -n1 | awk '{print $2}')" >> "$DEPENDENCIES_FILE"
+elif [[ "$PKG_MANAGER" == "pacman" ]]; then
+    echo "cri-tools: $(pacman -Si cri-tools | grep Version | awk '{print $3}')" >> "$DEPENDENCIES_FILE"
+    echo "conntrack: $(pacman -Si conntrack-tools | grep Version | awk '{print $3}')" >> "$DEPENDENCIES_FILE"
+elif [[ "$PKG_MANAGER" == "zypper" ]]; then
+    echo "cri-tools: $(zypper se -s cri-tools | grep -vE "S | Name" | awk '{print $7}' | head -n1)" >> "$DEPENDENCIES_FILE"
+    echo "conntrack: $(zypper se -s conntrack-tools | grep -vE "S | Name" | awk '{print $7}' | head -n1)" >> "$DEPENDENCIES_FILE"
+fi
+
+echo "Dependencies file created: $DEPENDENCIES_FILE"
+cat "$DEPENDENCIES_FILE"
 
 echo "Installation complete."
