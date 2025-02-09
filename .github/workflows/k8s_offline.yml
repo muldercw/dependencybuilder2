@@ -110,16 +110,16 @@ jobs:
       - name: Ensure Artifacts Directory Exists
         run: mkdir -p artifacts/
   
-      - name: Debug List Local Artifacts Directory Before Running Container
-        run: ls -lah artifacts/ || echo "Warning artifacts/ directory is empty!"
-  
       - name: Download and Extract Offline Installation Script
         uses: actions/download-artifact@v4
         with:
           name: install-script-${{ matrix.os }}
           path: artifacts/
   
-      - name: Debug Verify Installation Script After Download
+      - name: Set Executable Permissions After Download
+        run: chmod +x artifacts/install_${{ matrix.os }}_${{ env.K8S_VERSION }}.sh
+  
+      - name: Debug List Local Artifacts Directory Before Running Container
         run: ls -lah artifacts/ || echo "Warning artifacts/ directory is empty!"
   
       - name: Start Test Container
@@ -140,8 +140,11 @@ jobs:
           docker run --rm -d --name test-container -v $PWD/artifacts:/test-env/artifacts $IMAGE tail -f /dev/null
   
       - name: Debug List Files Inside Test Container Before Installation
-        run: docker exec test-container bash -c "ls -lah /test-env/artifacts/ || echo 'Warning /test-env/artifacts/ is empty!'"
+        run: docker exec test-container bash -c "ls -lah /test-env/artifacts/"
+  
+      - name: Debug Check Permissions Inside Test Container
+        run: docker exec test-container bash -c "ls -lah /test-env/artifacts/"
   
       - name: Run Offline Installation Inside Test Container
         if: success()
-        run: docker exec test-container bash -c "/test-env/artifacts/install_${{ matrix.os }}_${{ env.K8S_VERSION }}.sh"
+        run: docker exec test-container bash -c "chmod +x /test-env/artifacts/install_${{ matrix.os }}_${{ env.K8S_VERSION }}.sh && /test-env/artifacts/install_${{ matrix.os }}_${{ env.K8S_VERSION }}.sh"
