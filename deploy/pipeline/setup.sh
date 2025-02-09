@@ -110,11 +110,15 @@ ls -lahR /test-env/artifacts/
 # 🔎 Debug: Ensure we're inside the correct working directory
 cd /test-env/artifacts/ || { echo "❌ Error: Could not change to /test-env/artifacts/"; exit 1; }
 
-# 🔎 Debug: Find and install each .deb file
+# 🔎 Find and install each .deb package, handling special characters properly
 echo "🔎 Searching for .deb packages in /test-env/artifacts/var/cache/apt/archives/ ..."
-find /test-env/artifacts/var/cache/apt/archives/ -type f -name "*.deb" -print0 | while IFS= read -r -d '' file; do
-    echo "📦 Installing: $file"
-    $SUDO dpkg -i "$file" || true  # Continue even if some dependencies are missing
+find /test-env/artifacts/var/cache/apt/archives/ -type f -name "*.deb" | while read -r file; do
+    if [[ -n "$file" ]]; then
+        echo "📦 Installing: $file"
+        $SUDO dpkg -i "$file" || true  # Continue even if some dependencies are missing
+    else
+        echo "⚠️ Warning: Empty file path detected!"
+    fi
 done
 
 # Fix missing dependencies after installing .deb packages
