@@ -114,8 +114,8 @@ cd /test-env/artifacts/ || { echo "❌ Error: Could not change to /test-env/arti
 echo "🔎 Searching for .deb packages in /test-env/artifacts/var/cache/apt/archives/ ..."
 find /test-env/artifacts/var/cache/apt/archives/ -type f -name "*.deb" -exec echo "  - Found: {}" \;
 
-# Store results in an array
-readarray -t DEB_FILES < <(find /test-env/artifacts/var/cache/apt/archives/ -type f -name "*.deb" 2>/dev/null)
+# Store results in an array (fixing newline issues)
+IFS=$'\n' read -r -d '' -a DEB_FILES < <(find /test-env/artifacts/var/cache/apt/archives/ -type f -name "*.deb" -print0)
 
 # Debugging: Print all found .deb files with full paths
 echo "📝 Found the following .deb files:"
