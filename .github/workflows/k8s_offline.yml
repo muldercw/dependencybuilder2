@@ -114,11 +114,33 @@ jobs:
       - name: Ensure Artifacts Directory Exists
         run: mkdir -p artifacts/
   
-      - name: Download Checksums
+      - name: Download and Extract Offline Package Archive
+        uses: actions/download-artifact@v4
+        with:
+          name: offline-packages-${{ matrix.os }}
+          path: artifacts/
+      
+      - name: Extract Offline Package Archive
+        run: unzip -o artifacts/offline-packages-${{ matrix.os }}.zip -d artifacts/ || echo "No extraction needed"
+      
+      - name: Download and Extract Offline Installation Script
+        uses: actions/download-artifact@v4
+        with:
+          name: install-script-${{ matrix.os }}
+          path: artifacts/
+      
+      - name: Extract Offline Installation Script
+        run: unzip -o artifacts/install-script-${{ matrix.os }}.zip -d artifacts/ || echo "No extraction needed"
+      
+      - name: Download and Extract Checksums
         uses: actions/download-artifact@v4
         with:
           name: checksums-${{ matrix.os }}
           path: artifacts/
+      
+      - name: Extract Checksums
+        run: unzip -o artifacts/checksums-${{ matrix.os }}.zip -d artifacts/ || echo "No extraction needed"
+
   
       - name: Verify SHA256 Checksums
         run: |
