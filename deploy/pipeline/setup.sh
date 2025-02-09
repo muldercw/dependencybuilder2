@@ -107,12 +107,15 @@ fi
 echo "📂 Listing all files and subdirectories in /test-env/artifacts/ before installation:"
 ls -lahR /test-env/artifacts/
 
-# 🔎 Debug: Force `find` to explicitly print every directory and check results
-echo "🔎 Searching for .deb packages..."
-find /test-env/artifacts/ -type f -name "*.deb" -exec echo "  - Found: {}" \;
+# 🔎 Debug: Ensure we're inside the correct working directory
+cd /test-env/artifacts/ || { echo "❌ Error: Could not change to /test-env/artifacts/"; exit 1; }
+
+# 🔎 Debug: Find all .deb files inside the correct subdirectory
+echo "🔎 Searching for .deb packages in /test-env/artifacts/var/cache/apt/archives/ ..."
+find /test-env/artifacts/var/cache/apt/archives/ -type f -name "*.deb" -exec echo "  - Found: {}" \;
 
 # Store results in an array
-readarray -t DEB_FILES < <(find /test-env/artifacts/ -type f -name "*.deb" 2>/dev/null)
+readarray -t DEB_FILES < <(find /test-env/artifacts/var/cache/apt/archives/ -type f -name "*.deb" 2>/dev/null)
 
 # Debugging: Print all found .deb files with full paths
 echo "📝 Found the following .deb files:"
