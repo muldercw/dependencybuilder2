@@ -18,7 +18,9 @@ jobs:
 
       - name: Read Kubernetes Version from YAML
         id: read_version
-        run: echo "kube_version=$(awk -F': ' '/kubernetes_version:/ {print $2}' deploy/pipeline/kubeversion.yaml)" >> $GITHUB_ENV
+        run: |
+          KUBE_VERSION=$(awk -F': ' '/kubernetes_version:/ {print $2}' deploy/pipeline/kubeversion.yaml | tr -d '[:space:]')
+          echo "kube_version=$KUBE_VERSION" >> $GITHUB_ENV
 
   build:
     name: "Build Offline Installer for ${{ matrix.os }}"
