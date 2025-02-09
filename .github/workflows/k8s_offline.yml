@@ -34,13 +34,14 @@ jobs:
             echo "Error: Kubernetes version is missing from kubeversion.yaml!"
             exit 1
           fi
-          echo "kube_version=$KUBE_VERSION" >> $GITHUB_ENV
-          echo "::set-output name=kube_version::$KUBE_VERSION"
+          echo "kube_version=$KUBE_VERSION" >> "$GITHUB_ENV"
+          echo "kube_version=$KUBE_VERSION" >> "$GITHUB_OUTPUT"  # ✅ FIXED
 
       - name: Debug K8S Version
         run: |
           echo "Extracted KUBE_VERSION: $KUBE_VERSION"
           echo "Stored in GITHUB_ENV: ${{ env.kube_version }}"
+
 
   build:
     name: "Build Offline Installer for ${{ matrix.os }}"
