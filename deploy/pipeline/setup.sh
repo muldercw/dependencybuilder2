@@ -93,7 +93,7 @@ cat <<EOF > "$INSTALL_SCRIPT"
 #!/bin/bash
 set -e
 echo "Installing offline Kubernetes for $OS (v$K8S_VERSION)"
-sudo dpkg -i /var/cache/apt/archives/*.deb || sudo rpm -Uvh --force /var/cache/dnf/packages/*.rpm || sudo pacman -U --noconfirm /var/cache/pacman/pkg/*.pkg.tar.zst
+dpkg -i /var/cache/apt/archives/*.deb || rpm -Uvh --force /var/cache/dnf/packages/*.rpm || pacman -U --noconfirm /var/cache/pacman/pkg/*.pkg.tar.zst
 EOF
 
 chmod +x "$INSTALL_SCRIPT"
