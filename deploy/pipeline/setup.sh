@@ -18,6 +18,16 @@ if [[ -z "$K8S_VERSION" ]]; then
     exit 1
 fi
 
+# Create artifacts directory
+ARTIFACTS_DIR="${PWD}/artifacts"
+mkdir -p "$ARTIFACTS_DIR"
+
+# Define artifact filenames
+TAR_FILE="$ARTIFACTS_DIR/offline_packages_${OS}_${K8S_VERSION}.tar.gz"
+INSTALL_SCRIPT="$ARTIFACTS_DIR/install_${OS}_${K8S_VERSION}.sh"
+CHECKSUM_FILE="$ARTIFACTS_DIR/checksums_${OS}_${K8S_VERSION}.sha256"
+DEPENDENCIES_FILE="$ARTIFACTS_DIR/dependencies.yaml"
+
 # Define package manager commands
 declare -A OS_MAP
 OS_MAP[ubuntu]="apt"
@@ -43,18 +53,6 @@ fi
 
 PKG_MANAGER="${OS_MAP[$OS]}"
 INSTALL_CMD="${INSTALL_CMDS[$PKG_MANAGER]}"
-
-# Ensure package managers are installed
-if [[ "$PKG_MANAGER" == "dnf" && ! -x "$(command -v dnf)" ]]; then
-    echo "Installing dnf..."
-    sudo yum install -y dnf || sudo apt install -y dnf || echo "Could not install dnf!"
-elif [[ "$PKG_MANAGER" == "zypper" && ! -x "$(command -v zypper)" ]]; then
-    echo "Installing zypper..."
-    sudo apt install -y zypper || echo "Could not install zypper!"
-elif [[ "$PKG_MANAGER" == "pacman" && ! -x "$(command -v pacman)" ]]; then
-    echo "Installing pacman..."
-    sudo apt install -y pacman || echo "Could not install pacman!"
-fi
 
 # Validate Kubernetes repository URL before proceeding
 KUBE_URL="https://pkgs.k8s.io/core:/stable:/v${K8S_MAJOR_MINOR}/deb/Release.key"
@@ -86,12 +84,8 @@ echo "Installing Kubernetes components for $OS..."
 sudo apt-get install -y --allow-downgrades kubeadm=${K8S_VERSION}-1.1 kubelet=${K8S_VERSION}-1.1 kubectl=${K8S_VERSION}-1.1 cri-tools conntrack
 
 # ✅ Fix permission errors by ignoring inaccessible files
-TAR_FILE="offline_packages_${OS}_${K8S_VERSION}.tar.gz"
-INSTALL_SCRIPT="install_${OS}_${K8S_VERSION}.sh"
-CHECKSUM_FILE="checksums_${OS}_${K8S_VERSION}.sha256"
-
 echo "Creating offline package archive: $TAR_FILE"
-sudo tar --exclude="*/partial/*" --ignore-failed-read -czf "$TAR_FILE" /var/cache/apt/archives
+sudo tar --exclude="*/partial/*" --ignore-failed-read -czf "$TAR_FILE" /var/cache/apt/archives || echo "Warning: No APT cache found for offline packages."
 
 # ✅ Generate install script
 echo "Generating installation script: $INSTALL_SCRIPT"
@@ -107,5 +101,12 @@ chmod +x "$INSTALL_SCRIPT"
 # ✅ Generate SHA256 checksum
 echo "Generating SHA256 checksum file: $CHECKSUM_FILE"
 sha256sum "$TAR_FILE" "$INSTALL_SCRIPT" > "$CHECKSUM_FILE"
+
+# ✅ Generate dependencies.yaml
+echo "Generating dependencies.yaml..."
+echo "# Kubernetes Dependencies for $OS (K8S v$K8S_VERSION)" > "$DEPENDENCIES_FILE"
+echo "kubeadm: $K8S_VERSION" >> "$DEPENDENCIES_FILE"
+echo "kubelet: $K8S_VERSION" >> "$DEPENDENCIES_FILE"
+echo "kubectl: $K8S_VERSION" >> "$DEPENDENCIES_FILE"
 
 echo "Installation complete."
