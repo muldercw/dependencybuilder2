@@ -4,7 +4,7 @@ set -e
 OS=$1
 K8S_VERSION=$2
 
-# 🔧 Strip any extra quotes around the Kubernetes version
+# 🔧 Remove any extra quotes around the Kubernetes version
 K8S_VERSION=$(echo "$K8S_VERSION" | tr -d '"')
 
 # 🔧 Extract only major.minor version for repo setup (e.g., "1.29" from "1.29.13")
@@ -141,5 +141,11 @@ fi
 
 echo "Dependencies file created: $DEPENDENCIES_FILE"
 cat "$DEPENDENCIES_FILE"
+
+# ✅ Ensure artifacts are named correctly (No extra quotes)
+TAR_FILE="offline_packages_${OS}_${K8S_VERSION}.tar.gz"
+
+echo "Creating offline package archive: $TAR_FILE"
+tar -czf "$TAR_FILE" /var/cache/apt/archives || echo "Warning: No APT cache found for offline packages."
 
 echo "Installation complete."
