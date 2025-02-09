@@ -101,7 +101,8 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Debug K8S Version
-        run: echo "Using Kubernetes Version: $K8S_VERSION"
+        run: | 
+          echo "Using Kubernetes Version: $K8S_VERSION"
 
       - name: Download Offline Package Archive
         uses: actions/download-artifact@v4
