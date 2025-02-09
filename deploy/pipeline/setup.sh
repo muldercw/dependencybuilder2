@@ -86,7 +86,7 @@ echo "Installing Kubernetes components for $OS..."
 
 if [[ "$PKG_MANAGER" == "apt" ]]; then
     # ✅ Ensure all components use the correct version
-    sudo apt-get install -y kubeadm=${K8S_VERSION}-00 kubelet=${K8S_VERSION}-00 kubectl=${K8S_VERSION}-00
+    sudo apt-get install -y kubeadm=${K8S_VERSION}-1.1 kubelet=${K8S_VERSION}-1.1 kubectl=${K8S_VERSION}-1.1
 
     # ✅ Check available versions
     echo "Checking installed Kubernetes component versions..."
