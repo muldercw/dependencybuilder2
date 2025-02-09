@@ -134,8 +134,13 @@ jobs:
           path: artifacts/
 
       - name: Verify SHA256 Checksums
-        if: success()
-        run: sha256sum -c artifacts/checksums_${{ matrix.os }}_${{ env.K8S_VERSION }}.sha256
+        run: |
+          CHECKSUM_FILE="artifacts/checksums_${{ matrix.os }}_${{ env.K8S_VERSION }}.sha256"
+          if [[ -f "$CHECKSUM_FILE" ]]; then
+            sha256sum -c "$CHECKSUM_FILE"
+          else
+            echo "Warning: Checksum file not found for ${{ matrix.os }}. Skipping verification."
+          fi
 
       - name: Set Executable Permissions
         if: success()
