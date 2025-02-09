@@ -16,16 +16,30 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      - name: Check if kubeversion.yaml Exists
+        run: |
+          if [[ ! -f deploy/pipeline/kubeversion.yaml ]]; then
+            echo "Error: kubeversion.yaml is missing!"
+            exit 1
+          fi
+
+      - name: Debug kubeversion.yaml
+        run: cat deploy/pipeline/kubeversion.yaml
+
       - name: Read Kubernetes Version from YAML
         id: read_version
         run: |
-          KUBE_VERSION=$(awk -F': ' '/kubernetes_version:/ {print $2}' deploy/pipeline/kubeversion.yaml | tr -d '[:space:]')
+          KUBE_VERSION=$(grep 'kubernetes_version:' deploy/pipeline/kubeversion.yaml | awk '{print $2}' | tr -d '[:space:]')
           if [[ -z "$KUBE_VERSION" ]]; then
             echo "Error: Kubernetes version is missing from kubeversion.yaml!"
             exit 1
           fi
           echo "kube_version=$KUBE_VERSION" >> $GITHUB_ENV
 
+      - name: Debug K8S Version
+        run: |
+          echo "Extracted KUBE_VERSION: $KUBE_VERSION"
+          echo "Stored in GITHUB_ENV: ${{ env.kube_version }}"
 
   build:
     name: "Build Offline Installer for ${{ matrix.os }}"
