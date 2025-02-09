@@ -110,17 +110,39 @@ jobs:
       - name: Ensure Artifacts Directory Exists
         run: mkdir -p artifacts/
   
+      - name: Download and Extract Offline Package Archive
+        uses: actions/download-artifact@v4
+        with:
+          name: offline-packages-${{ matrix.os }}
+          path: artifacts/
+  
+      - name: Extract Offline Package Archive
+        run: tar -xvf artifacts/offline_packages_${{ matrix.os }}_${{ env.K8S_VERSION }}.tar.gz -C artifacts/ || echo "No extraction needed"
+  
       - name: Download and Extract Offline Installation Script
         uses: actions/download-artifact@v4
         with:
           name: install-script-${{ matrix.os }}
           path: artifacts/
   
+      - name: Download and Extract Checksums
+        uses: actions/download-artifact@v4
+        with:
+          name: checksums-${{ matrix.os }}
+          path: artifacts/
+  
+      - name: Download `.deb` Packages (For Debian-Based Systems)
+        if: matrix.os == 'ubuntu' || matrix.os == 'debian'
+        uses: actions/download-artifact@v4
+        with:
+          name: deb-packages-${{ matrix.os }}
+          path: artifacts/
+  
       - name: Set Executable Permissions After Download
         run: chmod +x artifacts/install_${{ matrix.os }}_${{ env.K8S_VERSION }}.sh
   
-      - name: Debug List Local Artifacts Directory Before Running Container
-        run: ls -lah artifacts/ || echo "Warning artifacts/ directory is empty!"
+      - name: Debug> List Local Artifacts Directory Before Running Container
+        run: ls -lah artifacts/ || echo "Warning> artifacts/ directory is empty!"
   
       - name: Start Test Container
         if: success()
@@ -139,11 +161,8 @@ jobs:
           echo "Starting test container for ${{ matrix.os }}..."
           docker run --rm -d --name test-container -v $PWD/artifacts:/test-env/artifacts $IMAGE tail -f /dev/null
   
-      - name: Debug List Files Inside Test Container Before Installation
-        run: docker exec test-container bash -c "ls -lah /test-env/artifacts/"
-  
-      - name: Debug Check Permissions Inside Test Container
-        run: docker exec test-container bash -c "ls -lah /test-env/artifacts/"
+      - name: Debug> List Files Inside Test Container Before Installation
+        run: docker exec test-container bash -c "ls -lah /test-env/artifacts/ || echo 'Warning /test-env/artifacts/ is empty!'"
   
       - name: Run Offline Installation Inside Test Container
         if: success()
