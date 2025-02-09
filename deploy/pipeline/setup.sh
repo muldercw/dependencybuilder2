@@ -110,31 +110,16 @@ ls -lahR /test-env/artifacts/
 # 🔎 Debug: Ensure we're inside the correct working directory
 cd /test-env/artifacts/ || { echo "❌ Error: Could not change to /test-env/artifacts/"; exit 1; }
 
-# 🔎 Debug: Find all .deb files inside the correct subdirectory
+# 🔎 Debug: Find and install each .deb file
 echo "🔎 Searching for .deb packages in /test-env/artifacts/var/cache/apt/archives/ ..."
-find /test-env/artifacts/var/cache/apt/archives/ -type f -name "*.deb" -exec echo "  - Found: {}" \;
-
-# Store results in an array using a `while read` loop (fixes special character issues)
-DEB_FILES=()
-while IFS= read -r file; do
-    DEB_FILES+=("$file")
-done < <(find /test-env/artifacts/var/cache/apt/archives/ -type f -name "*.deb")
-
-# Debugging: Print all found .deb files with full paths
-echo "📝 Found the following .deb files:"
-for FILE in "${DEB_FILES[@]}"; do
-    echo "  - $FILE"
+find /test-env/artifacts/var/cache/apt/archives/ -type f -name "*.deb" -print0 | while IFS= read -r -d '' file; do
+    echo "📦 Installing: $file"
+    $SUDO dpkg -i "$file" || true  # Continue even if some dependencies are missing
 done
 
-# If `.deb` files are found, install them
-if [[ ${#DEB_FILES[@]} -gt 0 ]]; then
-    echo "📦 Installing all found .deb packages..."
-    printf "%s\n" "${DEB_FILES[@]}" | xargs -r $SUDO dpkg -i || true
-    $SUDO apt-get install -f -y
-else
-    echo "⚠️ Warning: No .deb packages found! Skipping offline installation."
-fi
-
+# Fix missing dependencies after installing .deb packages
+echo "🔧 Resolving dependencies..."
+$SUDO apt-get install -f -y
 
 EOF
 
