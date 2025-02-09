@@ -110,16 +110,23 @@ ls -lahR /test-env/artifacts/
 # 🔎 Debug: Ensure we're inside the correct working directory
 cd /test-env/artifacts/ || { echo "❌ Error: Could not change to /test-env/artifacts/"; exit 1; }
 
-# 🔎 Find and install each .deb package, handling special characters properly
+# 🔎 Find and install each .deb package, ensuring correct handling of special characters
 echo "🔎 Searching for .deb packages in /test-env/artifacts/var/cache/apt/archives/ ..."
-find /test-env/artifacts/var/cache/apt/archives/ -type f -name "*.deb" | while read -r file; do
-    if [[ -n "$file" ]]; then
-        echo "📦 Installing: $file"
-        $SUDO dpkg -i "$file" || true  # Continue even if some dependencies are missing
-    else
-        echo "⚠️ Warning: Empty file path detected!"
-    fi
-done
+
+mapfile -t DEB_FILES < <(find /test-env/artifacts/var/cache/apt/archives/ -type f -name "*.deb")
+
+if [[ ${#DEB_FILES[@]} -eq 0 ]]; then
+    echo "⚠️ Warning: No .deb packages found! Skipping offline installation."
+else
+    for file in "${DEB_FILES[@]}"; do
+        if [[ -n "$file" && -f "$file" ]]; then
+            echo "📦 Installing: $file"
+            $SUDO dpkg -i "$file" || true  # Continue even if some dependencies are missing
+        else
+            echo "⚠️ Warning: Skipping invalid file path: '$file'"
+        fi
+    done
+fi
 
 # Fix missing dependencies after installing .deb packages
 echo "🔧 Resolving dependencies..."
