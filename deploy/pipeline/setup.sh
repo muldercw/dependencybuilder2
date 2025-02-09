@@ -92,9 +92,7 @@ echo "Generating installation script: $INSTALL_SCRIPT"
 cat <<EOF > "$INSTALL_SCRIPT"
 #!/bin/bash
 set -e
-
 echo "Installing offline Kubernetes for ubuntu (v${K8S_VERSION})"
-
 # Detect if running inside a container
 if [ -f /.dockerenv ]; then
     echo "Detected container environment. Running without sudo..."
@@ -102,26 +100,26 @@ if [ -f /.dockerenv ]; then
 else
     SUDO="sudo"
 fi
-
 # 🔍 Debug: List all files and subdirectories
 echo "📂 Listing all files and subdirectories in /test-env/artifacts/ before installation:"
 ls -lahR /test-env/artifacts/
-
-# 🔍 Debug: Find all .deb files
+# 🔎 Debug: Run find command and explicitly print output
 echo "🔎 Searching for .deb packages..."
-DEB_FILES=$(find /test-env/artifacts/ -type f -name "*.deb")
-
-if [[ -n "$DEB_FILES" ]]; then
+FOUND_DEB_FILES=$(find /test-env/artifacts/ -type f -name "*.deb" 2>&1)
+# Debugging: Print raw `find` output
+echo "📝 Find command output:"
+echo "$FOUND_DEB_FILES"
+# If `find` found files, install them
+if [[ -n "$FOUND_DEB_FILES" ]]; then
     echo "✅ Found the following .deb packages:"
-    echo "$DEB_FILES"
+    echo "$FOUND_DEB_FILES"
 
     echo "📦 Installing all found .deb packages..."
-    echo "$DEB_FILES" | xargs $SUDO dpkg -i || true
+    echo "$FOUND_DEB_FILES" | xargs $SUDO dpkg -i || true
     $SUDO apt-get install -f -y
 else
     echo "⚠️ Warning: No .deb packages found! Skipping offline installation."
 fi
-
 EOF
 
 chmod +x "$INSTALL_SCRIPT"
