@@ -107,26 +107,32 @@ fi
 echo "📂 Listing all files in /test-env/artifacts/ before installation:"
 find /test-env/artifacts/ -type f
 
-# 🔎 **Manually Define Package Directory Instead of Auto-Detect**
-DEB_DIR="/test-env/artifacts/var/cache/apt/archives"
+# **Manually Set Package Directory**
+DEB_SOURCE_DIR="/test-env/artifacts/var/cache/apt/archives"
+DEB_TARGET_DIR="/test-env/packages"
 
 # **Ensure Package Directory Exists**
-if [[ ! -d "$DEB_DIR" ]]; then
-    echo "❌ ERROR: Expected package directory $DEB_DIR does not exist!"
+if [[ ! -d "$DEB_SOURCE_DIR" ]]; then
+    echo "❌ ERROR: Expected package directory $DEB_SOURCE_DIR does not exist!"
     echo "🔍 Scanning for possible package directories..."
     find /test-env/artifacts/ -type d
     exit 1
 else
-    echo "✅ Using package directory: $DEB_DIR"
+    echo "✅ Using package directory: $DEB_SOURCE_DIR"
 fi
 
-# **Find All `.deb` Files** (Ensure to quote variable properly to handle special characters)
-mapfile -t DEB_FILES < <(find "$DEB_DIR" -maxdepth 1 -type f -name "*.deb" 2>/dev/null)
+# **Move `.deb` Files to More Accessible Location**
+echo "🚚 Moving .deb files to $DEB_TARGET_DIR..."
+mkdir -p "$DEB_TARGET_DIR"
+mv "$DEB_SOURCE_DIR"/*.deb "$DEB_TARGET_DIR"/ || echo "⚠️ Warning: No .deb files found to move!"
+
+# **Find All `.deb` Files Again (Now in /test-env/packages)**
+mapfile -t DEB_FILES < <(find "$DEB_TARGET_DIR" -maxdepth 1 -type f -name "*.deb" 2>/dev/null)
 
 # **Exit if No `.deb` Files Are Found**
 if [[ ${#DEB_FILES[@]} -eq 0 ]]; then
-    echo "⚠️ ERROR: No .deb packages found in '$DEB_DIR'!"
-    ls -lah "$DEB_DIR" || echo "❌ ERROR: Could not list directory contents!"
+    echo "⚠️ ERROR: No .deb packages found in '$DEB_TARGET_DIR'!"
+    ls -lah "$DEB_TARGET_DIR" || echo "❌ ERROR: Could not list directory contents!"
     exit 1
 fi
 
@@ -136,7 +142,7 @@ for FILE in "${DEB_FILES[@]}"; do
     echo "  - $FILE"
 done
 
-# 🚀 **Install Each `.deb` Package (Handling Special Characters)**
+# 🚀 **Install Each `.deb` Package**
 for FILE in "${DEB_FILES[@]}"; do
     echo "📦 Installing: $FILE"
     $SUDO dpkg -i "$FILE" || true  # Continue even if dependencies are missing
@@ -147,6 +153,7 @@ echo "🔧 Resolving dependencies..."
 $SUDO apt-get install -f -y
 
 echo "✅ Installation complete!"
+
 
 EOF
 
