@@ -134,26 +134,33 @@ echo "🔍 Checking OS information..."
 if [[ -f "/etc/os-release" ]]; then
     echo "ℹ️ Contents of /etc/os-release:"
     cat /etc/os-release
-    OS_ID=$(grep -E "^ID=" /etc/os-release | cut -d= -f2 | tr -d '"')  # Extract ID manually
+    OS_ID=$(grep -E "^ID=" /etc/os-release | cut -d= -f2 | tr -d '"')
 else
     echo "⚠️ Warning: /etc/os-release not found!"
     OS_ID=""
 fi
 
 # **Fallback OS detection methods**
-if [[ -z "$OS_ID" ]] && command -v lsb_release &> /dev/null; then
-    OS_ID=$(lsb_release -si | awk '{print tolower($1)}')
-elif [[ -z "$OS_ID" ]] && [[ -f "/etc/debian_version" ]]; then
-    OS_ID="debian"
-elif [[ -z "$OS_ID" ]] && [[ -f "/etc/redhat-release" ]]; then
-    OS_ID="rhel"
-elif [[ -z "$OS_ID" ]] && [[ -f "/etc/SuSE-release" ]]; then
-    OS_ID="suse"
-elif [[ -z "$OS_ID" ]] && command -v uname &> /dev/null; then
-    OS_KERNEL=$(uname -s)
-    if [[ "$OS_KERNEL" == "Linux" ]]; then
-        OS_ID="linux"
+if [[ -z "$OS_ID" ]]; then
+    if command -v lsb_release &> /dev/null; then
+        OS_ID=$(lsb_release -si | awk '{print tolower($1)}')
+    elif [[ -f "/etc/debian_version" ]]; then
+        OS_ID="debian"
+    elif [[ -f "/etc/redhat-release" ]]; then
+        OS_ID="rhel"
+    elif [[ -f "/etc/SuSE-release" ]]; then
+        OS_ID="suse"
+    elif command -v uname &> /dev/null; then
+        OS_KERNEL=$(uname -s)
+        if [[ "$OS_KERNEL" == "Linux" ]]; then
+            OS_ID="linux"
+        fi
     fi
+fi
+
+# **Special Handling for Arch Linux**
+if [[ "$OS_ID" == "" ]] && grep -qi "Arch Linux" /etc/os-release; then
+    OS_ID="arch"
 fi
 
 # **Print detected OS**
