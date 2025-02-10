@@ -125,7 +125,7 @@ echo "📦 Beginning installation of .deb packages..."
 
 echo "🚀 Starting installation of .deb packages..."
 
-# Ensure paths.txt is correctly read
+# Ensure paths.txt exists and is not empty
 if [[ ! -s /test-env/artifacts/paths.txt ]]; then
     echo "❌ ERROR: paths.txt is missing or empty! Exiting..."
     exit 1
@@ -134,16 +134,19 @@ fi
 echo "📝 Verifying paths.txt contents before reading..."
 cat -A /test-env/artifacts/paths.txt  # Shows hidden characters like ^M (Windows newlines)
 
-# 🚨 Ensure paths.txt has correct line endings (Fix Windows CRLF issue)
-echo "🔄 Converting paths.txt to Unix format..."
-sed -i 's/\r$//' /test-env/artifacts/paths.txt  # This actually modifies the file
+# 🚨 Hard fix: Rewrite file line-by-line to remove Windows-style newlines and trailing spaces
+echo "🔄 Cleaning up paths.txt to ensure proper line endings..."
+awk '{gsub(/\r$/, ""); print}' /test-env/artifacts/paths.txt > /test-env/artifacts/paths_cleaned.txt
+mv /test-env/artifacts/paths_cleaned.txt /test-env/artifacts/paths.txt
 
-# Re-print file contents to confirm the fix worked
+# Re-print file contents to confirm fix worked
 echo "📝 Verifying paths.txt contents after fix..."
 cat -A /test-env/artifacts/paths.txt
 
-# Read each package path from paths.txt and install
+echo "📦 Beginning installation of .deb packages..."
 while IFS= read -r PACKAGE_PATH || [[ -n "$PACKAGE_PATH" ]]; do
+    PACKAGE_PATH=$(echo "$PACKAGE_PATH" | tr -d '\r' | xargs)  # Force trim any bad characters
+
     echo "🔹 Debug: Read raw line -> '$PACKAGE_PATH'"
 
     # Skip empty lines
@@ -166,6 +169,7 @@ while IFS= read -r PACKAGE_PATH || [[ -n "$PACKAGE_PATH" ]]; do
 done < /test-env/artifacts/paths.txt
 
 echo "✅ All installations complete."
+
 
 
 EOF
