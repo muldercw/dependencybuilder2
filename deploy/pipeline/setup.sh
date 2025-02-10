@@ -59,15 +59,14 @@ if [[ "$OS" == "ubuntu" || "$OS" == "debian" ]]; then
 elif [[ "$OS" == "rocky" ]]; then
     echo "🔗 Configuring Kubernetes repository for Rocky Linux..."
     dnf install -y dnf-plugins-core
-    echo -e "[kubernetes]\nname=Kubernetes Repository\nbaseurl=https://pkgs.k8s.io/core:/stable:/v${K8S_MAJOR_MINOR}/rpm/\nenabled=1\ngpgcheck=0" | tee /etc/yum.repos.d/kubernetes.repo > /dev/null
+    echo "[kubernetes] name=Kubernetes baseurl=https://pkgs.k8s.io/core:/stable:/v${K8S_MAJOR_MINOR}/rpm/ enabled=1 gpgcheck=1 gpgkey=https://pkgs.k8s.io/core:/stable:/v${K8S_MAJOR_MINOR}/rpm/repodata/repomd.xml.key" | tee /etc/yum.repos.d/kubernetes.repo
 
 
     echo "🔄 Refreshing DNF metadata..."
     dnf makecache --refresh
 
-    # ✅ Force DNF to only resolve x86_64 architecture packages
-    ARCH="x86_64"
-    PKGS="kubeadm-${K8S_VERSION}.${ARCH} kubelet-${K8S_VERSION}.${ARCH} kubectl-${K8S_VERSION}.${ARCH} cri-tools.${ARCH} conntrack-tools.${ARCH} iptables.${ARCH} iproute.${ARCH} ethtool.${ARCH}"
+
+    PKGS="kubeadm-${K8S_VERSION} kubelet-${K8S_VERSION} kubectl-${K8S_VERSION} cri-tools conntrack-tools iptables iproute. ethtool"
 
     echo "📥 Downloading Kubernetes packages for architecture: $ARCH..."
     dnf download --resolve --arch=${ARCH} $PKGS
