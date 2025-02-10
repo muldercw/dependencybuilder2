@@ -107,21 +107,21 @@ fi
 echo "📂 Listing all files in /test-env/artifacts/ before installation:"
 find /test-env/artifacts/ -type f
 
-# 🔎 **Set Package Directory Manually**
+# 🔎 **Explicitly Set Package Directory**
 DEB_DIR="/test-env/artifacts/var/cache/apt/archives"
 
-# **Validate Directory Exists**
+# **Ensure Package Directory Exists**
 if [[ ! -d "$DEB_DIR" ]]; then
-    echo "❌ ERROR: Expected package directory '$DEB_DIR' does not exist!"
+    echo "❌ ERROR: Package directory '$DEB_DIR' does not exist!"
     exit 1
 fi
 
 # **Find All `.deb` Files**
 DEB_FILES=$(find "$DEB_DIR" -maxdepth 1 -type f -name "*.deb")
 
-# **If No `.deb` Files Are Found, Exit With an Error**
+# **Exit if No `.deb` Files Are Found**
 if [[ -z "$DEB_FILES" ]]; then
-    echo "⚠️ ERROR: No .deb packages found in $DEB_DIR!"
+    echo "⚠️ ERROR: No .deb packages found in '$DEB_DIR'!"
     ls -lah "$DEB_DIR" || echo "❌ ERROR: Could not list directory contents!"
     exit 1
 fi
@@ -143,7 +143,6 @@ echo "🔧 Resolving dependencies..."
 $SUDO apt-get install -f -y
 
 echo "✅ Installation complete!"
-
 
 EOF
 
