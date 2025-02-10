@@ -120,11 +120,11 @@ else
     echo "✅ Using package directory: $DEB_DIR"
 fi
 
-# **Find All `.deb` Files** (Ensure to quote variable properly)
-DEB_FILES=$(find "$DEB_DIR" -maxdepth 1 -type f -name "*.deb" 2>/dev/null)
+# **Find All `.deb` Files** (Ensure to quote variable properly to handle special characters)
+mapfile -t DEB_FILES < <(find "$DEB_DIR" -maxdepth 1 -type f -name "*.deb" 2>/dev/null)
 
 # **Exit if No `.deb` Files Are Found**
-if [[ -z "$DEB_FILES" ]]; then
+if [[ ${#DEB_FILES[@]} -eq 0 ]]; then
     echo "⚠️ ERROR: No .deb packages found in '$DEB_DIR'!"
     ls -lah "$DEB_DIR" || echo "❌ ERROR: Could not list directory contents!"
     exit 1
@@ -132,12 +132,12 @@ fi
 
 # 📦 **Print Found .deb Files**
 echo "📝 Found the following .deb files:"
-for FILE in $DEB_FILES; do
+for FILE in "${DEB_FILES[@]}"; do
     echo "  - $FILE"
 done
 
-# 🚀 **Install Each `.deb` Package**
-for FILE in $DEB_FILES; do
+# 🚀 **Install Each `.deb` Package (Handling Special Characters)**
+for FILE in "${DEB_FILES[@]}"; do
     echo "📦 Installing: $FILE"
     $SUDO dpkg -i "$FILE" || true  # Continue even if dependencies are missing
 done
