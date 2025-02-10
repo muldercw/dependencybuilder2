@@ -119,18 +119,22 @@ cat /test-env/artifacts/paths.txt
 # 🚀 INSTALLING PACKAGES
 echo "📦 Beginning installation of .deb packages..."
 
-while IFS= read -r PACKAGE_PATH; do
+while IFS= read -r PACKAGE_PATH || [[ -n "$PACKAGE_PATH" ]]; do
     echo "📦 Installing: $PACKAGE_PATH"
-    dpkg -i "$PACKAGE_PATH" || echo "⚠️ Warning: Failed to install $PACKAGE_PATH"
+    if ! dpkg -i "$PACKAGE_PATH"; then
+        echo "❌ ERROR: Failed to install $PACKAGE_PATH"
+        exit 1
+    fi
 done < /test-env/artifacts/paths.txt
 
 # 🔧 Resolve dependencies
 echo "🔧 Resolving dependencies..."
-apt-get install -f -y
+if ! apt-get install -f -y; then
+    echo "❌ ERROR: Failed to resolve dependencies"
+    exit 1
+fi
 
 echo "✅ Installation complete!"
-
-
 
 EOF
 
