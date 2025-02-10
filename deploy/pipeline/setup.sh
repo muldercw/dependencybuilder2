@@ -139,6 +139,9 @@ echo "🔄 Converting paths.txt to Unix format..."
 tr -d '\r' < /test-env/artifacts/paths.txt > /test-env/artifacts/cleaned_paths.txt
 mv /test-env/artifacts/cleaned_paths.txt /test-env/artifacts/paths.txt
 
+echo "📝 Verifying paths.txt contents before reading...(after fix)"
+cat -A /test-env/artifacts/paths.txt  # Shows hidden characters like ^M (Windows newlines)
+
 # Read each package path from paths.txt and install
 while IFS= read -r PACKAGE_PATH || [[ -n "$PACKAGE_PATH" ]]; do
     echo "🔹 Debug: Read raw line -> '$PACKAGE_PATH'"
