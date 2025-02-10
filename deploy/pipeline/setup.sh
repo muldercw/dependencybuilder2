@@ -1,62 +1,144 @@
 #!/bin/bash
 set -e  # Stop on first error
 
-echo "🚀 Starting Kubernetes Offline Installation Test"
+OS=$1
+K8S_VERSION=$2
 
-# ✅ Step 1: Check Installed Kubernetes Packages
-echo "🔎 Checking installed Kubernetes components..."
-dpkg -l | grep -E "kubeadm|kubelet|kubectl|cri-tools|conntrack|iptables|iproute2|ethtool" || echo "❌ ERROR: No Kubernetes packages found!"
+# 🔧 Remove any extra quotes
+K8S_VERSION=$(echo "$K8S_VERSION" | tr -d '"')
 
-MISSING_PACKAGES=()
-for pkg in kubeadm kubelet kubectl cri-tools conntrack iptables iproute2 ethtool; do
-    if ! dpkg -l | grep -q "$pkg"; then
-        echo "❌ MISSING: $pkg"
-        MISSING_PACKAGES+=("$pkg")
-    fi
+# 🔧 Extract only major.minor version (e.g., "1.29" from "1.29.13")
+K8S_MAJOR_MINOR=$(echo "$K8S_VERSION" | cut -d'.' -f1,2)
+
+echo "🚀 Starting setup for OS: $OS with Kubernetes version: $K8S_VERSION (Repo version: $K8S_MAJOR_MINOR)"
+
+# Validate Kubernetes Version
+if [[ -z "$K8S_VERSION" ]]; then
+    echo "❌ ERROR: Kubernetes version is not set!"
+    exit 1
+fi
+
+# Create artifacts directory
+ARTIFACTS_DIR="${PWD}/artifacts"
+DEB_DIR="$ARTIFACTS_DIR/deb-packages"
+
+mkdir -p "$ARTIFACTS_DIR" "$DEB_DIR"
+
+# Define artifact filenames
+TAR_FILE="$ARTIFACTS_DIR/offline_packages_${OS}_${K8S_VERSION}.tar.gz"
+INSTALL_SCRIPT="$ARTIFACTS_DIR/install_${OS}_${K8S_VERSION}.sh"
+CHECKSUM_FILE="$ARTIFACTS_DIR/checksums_${OS}_${K8S_VERSION}.sha256"
+DEPENDENCIES_FILE="$ARTIFACTS_DIR/dependencies.yaml"
+
+# Validate OS
+if [[ "$OS" != "ubuntu" && "$OS" != "debian" ]]; then
+    echo "❌ ERROR: Unsupported OS: $OS"
+    exit 1
+fi
+
+# ✅ **Step 1: Add Kubernetes APT Repo**
+echo "🔗 Adding Kubernetes repository for $OS..."
+sudo apt-get update
+sudo apt-get install -y apt-transport-https ca-certificates curl gnupg
+
+sudo mkdir -p -m 755 /etc/apt/keyrings
+curl -fsSL "https://pkgs.k8s.io/core:/stable:/v${K8S_MAJOR_MINOR}/deb/Release.key" | sudo gpg --dearmor --batch --yes -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+sudo chmod 644 /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v${K8S_MAJOR_MINOR}/deb/ /" | sudo tee /etc/apt/sources.list.d/kubernetes.list
+sudo chmod 644 /etc/apt/sources.list.d/kubernetes.list
+sudo apt-get update -y
+
+# ✅ **Step 2: Install Kubernetes (for version validation)**
+echo "📦 Installing Kubernetes version $K8S_VERSION..."
+sudo apt-get install -y --allow-downgrades --allow-change-held-packages kubeadm=${K8S_VERSION}-1.1 kubelet=${K8S_VERSION}-1.1 kubectl=${K8S_VERSION}-1.1 cri-tools conntrack iptables iproute2 ethtool
+
+# ✅ **Step 3: Download Exact Package Versions (All Dependencies)**
+echo "📥 Fetching Kubernetes and dependencies for offline installation..."
+
+# Define required packages
+KUBE_PACKAGES="kubeadm=${K8S_VERSION}-1.1 kubelet=${K8S_VERSION}-1.1 kubectl=${K8S_VERSION}-1.1 cri-tools conntrack iptables iproute2 ethtool"
+
+# ✅ Fix permissions for apt downloads
+echo "🔧 Fixing permissions for APT downloads..."
+sudo chmod -R a+rwx /var/cache/apt/archives
+sudo chown -R _apt:root /var/cache/apt/archives
+
+# **Download all packages (ignoring cache)**
+echo "📥 Downloading Kubernetes packages..."
+sudo apt-get download --allow-downgrades --allow-change-held-packages $KUBE_PACKAGES
+
+# **Recursively fetch dependencies for each package**
+for pkg in $KUBE_PACKAGES; do
+    echo "📥 Downloading dependencies for: $pkg"
+    
+    # Fix permissions before downloading
+    sudo chmod -R a+rwx /var/cache/apt/archives
+    sudo chown -R _apt:root /var/cache/apt/archives
+
+    # Download dependencies recursively
+    DEPS=$(apt-cache depends --recurse --no-suggests --no-conflicts --no-replaces --no-breaks --no-enhances --no-pre-depends "$pkg" | grep "^\w" | sort -u)
+    
+    sudo apt-get download --allow-downgrades --allow-change-held-packages $DEPS || echo "⚠️ Warning: Some dependencies could not be downloaded"
 done
 
-if [ ${#MISSING_PACKAGES[@]} -gt 0 ]; then
-    echo "⚠️ The following required packages are missing:"
-    printf '%s\n' "${MISSING_PACKAGES[@]}"
-else
-    echo "✅ All required Kubernetes packages are installed."
-fi
+# ✅ Move all downloaded `.deb` files to artifacts
+mv *.deb "$DEB_DIR"
 
-# ✅ Step 2: Check for Broken Dependencies
-echo "🔎 Checking for missing package dependencies..."
-dpkg -C || echo "✅ No broken dependencies detected."
+# ✅ **Step 4: Create offline package archive**
+echo "📦 Creating offline package archive: $TAR_FILE"
+sudo tar --exclude="*/partial/*" --ignore-failed-read -czvf "$TAR_FILE" -C "$DEB_DIR" .
 
-if dpkg -C | grep -q "The following packages"; then
-    echo "❌ MISSING DEPENDENCIES: These packages have unmet dependencies."
-    dpkg -C
-fi
+# ✅ **Step 5: Generate Install Script**
+echo "📝 Generating installation script: $INSTALL_SCRIPT"
+cat <<EOF > "$INSTALL_SCRIPT"
+#!/bin/bash
+set -e  # Stop on first error
 
-# ✅ Step 3: Enable and Start kubelet Service
-echo "🔄 Enabling and starting kubelet..."
-sudo systemctl enable kubelet || echo "⚠️ Warning: Could not enable kubelet!"
-sudo systemctl start kubelet || echo "⚠️ Warning: Could not start kubelet!"
+echo "🚀 Debugging: Installing all .deb files recursively"
 
-# ✅ Step 4: Check kubelet Status
-echo "🔎 Checking kubelet status..."
-systemctl status kubelet --no-pager || echo "⚠️ kubelet is not running!"
+# 📂 Print directory tree for debugging
+echo "📂 Listing all files in /test-env/artifacts/:"
+find /test-env/artifacts/ -type f -print
 
-# ✅ Step 5: Initialize Kubernetes Cluster (Master Node)
-echo "🚀 Initializing Kubernetes..."
-sudo kubeadm init --kubernetes-version=${K8S_VERSION} || echo "❌ kubeadm init failed! Possible missing dependencies."
+# 🔧 Fix permissions for all .deb files
+echo "🔧 Fixing permissions for .deb packages..."
+chmod -R u+rwX /test-env/artifacts  # Ensure read/write/execute permissions
+ls -lah /test-env/artifacts  # Verify ownership & permissions
 
-# ✅ Step 6: Print kubeadm Join Command for Worker Nodes
-echo "✅ Kubernetes initialized successfully. To join worker nodes, run:"
-kubeadm token create --print-join-command || echo "❌ ERROR: Unable to generate join command."
+# ✅ Suppress frontend issues (Debconf)
+export DEBIAN_FRONTEND=noninteractive
 
-# ✅ Step 7: Verify Kubernetes Node & Pod Status
-echo "🔍 Checking Kubernetes node status..."
-kubectl get nodes || echo "❌ ERROR: 'kubectl get nodes' failed."
+# ✅ Install all .deb packages, allowing downgrades and ignoring conflicts
+echo "📦 Installing all .deb packages from /test-env/artifacts/..."
+dpkg -R --install /test-env/artifacts/ || echo "⚠️ Warning: Some packages may have failed to install."
 
-echo "🔍 Checking Kubernetes system pods..."
-kubectl get pods -n kube-system || echo "❌ ERROR: 'kubectl get pods' failed."
+# ✅ Fix any broken dependencies
+echo "🔧 Fixing broken dependencies..."
+apt-get -y install --fix-broken || echo "⚠️ Warning: Some dependencies may still be missing."
 
-# ✅ Step 8: Print Logs if Issues Exist
-echo "🔎 Checking logs for errors..."
-journalctl -u kubelet --no-pager | tail -n 50 || echo "⚠️ No logs found for kubelet."
+# ✅ Force configuration of unconfigured packages
+echo "🔄 Configuring unconfigured packages..."
+dpkg --configure -a || echo "⚠️ Warning: Some packages may still be unconfigured."
 
-echo "✅ Kubernetes Offline Test Completed."
+# ✅ Verify installation
+echo "🔍 Verifying installed Kubernetes components..."
+dpkg -l | grep -E "kubeadm|kubelet|kubectl"
+
+echo "✅ All installations complete."
+EOF
+
+chmod +x "$INSTALL_SCRIPT"
+
+# ✅ **Step 6: Generate SHA256 Checksum**
+echo "🔍 Generating SHA256 checksum file: $CHECKSUM_FILE"
+sha256sum "$TAR_FILE" "$INSTALL_SCRIPT" > "$CHECKSUM_FILE"
+
+# ✅ **Step 7: Generate dependencies.yaml**
+echo "📜 Generating dependencies.yaml..."
+echo "# Kubernetes Dependencies for $OS (K8S v$K8S_VERSION)" > "$DEPENDENCIES_FILE"
+echo "kubeadm: $K8S_VERSION" >> "$DEPENDENCIES_FILE"
+echo "kubelet: $K8S_VERSION" >> "$DEPENDENCIES_FILE"
+echo "kubectl: $K8S_VERSION" >> "$DEPENDENCIES_FILE"
+
+echo "✅ Kubernetes Offline Build Complete."
