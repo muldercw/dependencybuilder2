@@ -103,7 +103,7 @@ else
     SUDO="sudo"
 fi
 
-# 🗂 Print full directory structure
+# 🗂 Print full directory structure for debugging
 echo "📂 Listing all files in /test-env/artifacts/ before installation:"
 find /test-env/artifacts/ -type f
 
@@ -111,15 +111,16 @@ find /test-env/artifacts/ -type f
 DEB_DIR="/test-env/artifacts/var/cache/apt/archives"
 
 # **Ensure Package Directory Exists**
-if [[ ! -d "$DEB_DIR" ]]; then
+if [[ ! -d "$DEB_DIR" || -z "$DEB_DIR" ]]; then
     echo "❌ ERROR: Package directory '$DEB_DIR' does not exist!"
+    ls -lah /test-env/artifacts/ || echo "❌ ERROR: Could not list artifacts directory!"
     exit 1
 else
     echo "✅ Using package directory: $DEB_DIR"
 fi
 
-# **Find All `.deb` Files**
-DEB_FILES=$(find "$DEB_DIR" -maxdepth 1 -type f -name "*.deb")
+# **Find All `.deb` Files** (Ensure to quote variable properly)
+DEB_FILES=$(find "$DEB_DIR" -maxdepth 1 -type f -name "*.deb" 2>/dev/null)
 
 # **Exit if No `.deb` Files Are Found**
 if [[ -z "$DEB_FILES" ]]; then
@@ -145,7 +146,6 @@ echo "🔧 Resolving dependencies..."
 $SUDO apt-get install -f -y
 
 echo "✅ Installation complete!"
-
 
 EOF
 
