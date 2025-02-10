@@ -125,20 +125,26 @@ echo "📦 Beginning installation of .deb packages..."
 
 echo "🚀 Starting installation of .deb packages..."
 
-# Check if paths.txt exists and is not empty
+# Ensure paths.txt is correctly read
 if [[ ! -s /test-env/artifacts/paths.txt ]]; then
     echo "❌ ERROR: paths.txt is missing or empty! Exiting..."
     exit 1
 fi
 
-echo "📝 Reading paths.txt line by line..."
-cat /test-env/artifacts/paths.txt  # Print contents for debugging
+echo "📝 Verifying paths.txt contents before reading..."
+cat -A /test-env/artifacts/paths.txt  # Shows hidden characters like ^M (Windows newlines)
+
+# Convert to Unix format in case of Windows line endings
+dos2unix /test-env/artifacts/paths.txt 2>/dev/null || echo "ℹ️ Skipping dos2unix (not installed)"
 
 # Read each package path from paths.txt and install one by one
 while IFS= read -r PACKAGE_PATH || [[ -n "$PACKAGE_PATH" ]]; do
-    echo "🔹 Read line: '$PACKAGE_PATH'"  # Debugging: Show each line read
+    echo "🔹 Debug: Read raw line -> '$PACKAGE_PATH'"
 
-    # Skip empty lines (just in case)
+    # Strip possible carriage return characters (\r from Windows format)
+    PACKAGE_PATH=$(echo "$PACKAGE_PATH" | tr -d '\r')
+
+    # Skip empty lines
     if [[ -z "$PACKAGE_PATH" ]]; then
         echo "⚠️ Skipping empty line"
         continue 
@@ -158,6 +164,7 @@ while IFS= read -r PACKAGE_PATH || [[ -n "$PACKAGE_PATH" ]]; do
 done < /test-env/artifacts/paths.txt
 
 echo "✅ All installations complete."
+
 
 EOF
 
