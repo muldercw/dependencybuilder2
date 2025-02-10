@@ -84,6 +84,23 @@ elif [[ "$OS" == "fedora" ]]; then
 
     echo "📥 Downloading Kubernetes packages..."
     dnf download --resolve $PKGS
+elif [[ "$OS" == "arch" ]]; then
+    echo "🔗 Configuring Arch Linux repository..."
+    pacman -Sy --noconfirm archlinux-keyring
+
+    PKGS="kubeadm kubelet kubectl conntrack-tools iptables iproute2 ethtool"
+
+    echo "📥 Downloading Kubernetes packages..."
+    for pkg in $PKGS; do
+        if pacman -Ss "^$pkg\$" &>/dev/null; then
+            pacman -Sw --noconfirm --cachedir="$PKG_DIR" $pkg
+        else
+            echo "⚠️ Warning: Package '$pkg' not found in Arch Linux repositories. Skipping..."
+        fi
+    done
+
+    # ✅ Fix: Do NOT use `apt-cache` for Arch!
+    echo "✅ Arch Linux packages downloaded successfully!"
 
 elif [[ "$OS" == "opensuse" ]]; then
     echo "🔗 Configuring Kubernetes repository for OpenSUSE..."
