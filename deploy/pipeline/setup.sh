@@ -128,20 +128,29 @@ echo "🚀 Installing only available packages from /test-env/artifacts/"
 PKG_DIR="/test-env/artifacts/"
 
 # Detect OS & Package Manager
-if command -v apt-get &> /dev/null; then
+if [[ -f "/etc/os-release" ]]; then
+    source /etc/os-release
+    OS_ID="$ID"
+else
+    echo "❌ ERROR: Unable to detect OS."
+    exit 1
+fi
+
+echo "🔍 Detected OS: $OS_ID"
+
+# Determine the package manager based on the OS
+if [[ "$OS_ID" == "ubuntu" || "$OS_ID" == "debian" ]]; then
     PKG_MANAGER="dpkg"
-elif command -v dnf &> /dev/null; then
-    if grep -qi "fedora" /etc/os-release; then
-        PKG_MANAGER="dnf_fedora"
-    else
-        PKG_MANAGER="dnf"
-    fi
-elif command -v pacman &> /dev/null; then
+elif [[ "$OS_ID" == "rocky" || "$OS_ID" == "centos" ]]; then
+    PKG_MANAGER="dnf"
+elif [[ "$OS_ID" == "fedora" ]]; then
+    PKG_MANAGER="dnf_fedora"
+elif [[ "$OS_ID" == "arch" ]]; then
     PKG_MANAGER="pacman"
-elif command -v zypper &> /dev/null; then
+elif [[ "$OS_ID" == "opensuse" ]]; then
     PKG_MANAGER="zypper"
 else
-    echo "❌ ERROR: Unsupported OS"
+    echo "❌ ERROR: Unsupported OS: $OS_ID"
     exit 1
 fi
 
@@ -186,7 +195,11 @@ fi
 
 # ✅ Final Verification
 echo "🔍 Verifying installed Kubernetes components..."
-dpkg -l | grep -E "kubeadm|kubelet|kubectl|containerd" 2>/dev/null || echo "⚠️ Warning Some Kubernetes components may not be installed."
+case "$PKG_MANAGER" in
+    dpkg) dpkg -l | grep -E "kubeadm|kubelet|kubectl|containerd" 2>/dev/null || echo "⚠️ Warning Some Kubernetes components may not be installed." ;;
+    pacman) pacman -Q | grep -E "kubeadm|kubelet|kubectl|containerd" 2>/dev/null || echo "⚠️ Warning Some Kubernetes components may not be installed." ;;
+    dnf|dnf_fedora|zypper) rpm -qa | grep -E "kubeadm|kubelet|kubectl|containerd" 2>/dev/null || echo "⚠️ Warning Some Kubernetes components may not be installed." ;;
+esac
 
 echo "✅ Kubernetes installation complete."
 
