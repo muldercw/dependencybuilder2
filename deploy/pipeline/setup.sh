@@ -20,9 +20,9 @@ fi
 
 # Create artifacts directory
 ARTIFACTS_DIR="${PWD}/artifacts"
-DEB_DIR="$ARTIFACTS_DIR/deb-packages"
+PKG_DIR="$ARTIFACTS_DIR/packages"
 
-mkdir -p "$ARTIFACTS_DIR" "$DEB_DIR"
+mkdir -p "$ARTIFACTS_DIR" "$PKG_DIR"
 
 # Define artifact filenames
 TAR_FILE="$ARTIFACTS_DIR/offline_packages_${OS}_${K8S_VERSION}.tar.gz"
@@ -31,127 +31,125 @@ CHECKSUM_FILE="$ARTIFACTS_DIR/checksums_${OS}_${K8S_VERSION}.sha256"
 DEPENDENCIES_FILE="$ARTIFACTS_DIR/dependencies.yaml"
 
 # Validate OS
-if [[ "$OS" != "ubuntu" && "$OS" != "debian" ]]; then
+if [[ "$OS" == "ubuntu" || "$OS" == "debian" ]]; then
+    PKG_MANAGER="apt"
+elif [[ "$OS" == "centos" || "$OS" == "rocky" || "$OS" == "fedora" ]]; then
+    PKG_MANAGER="dnf"
+elif [[ "$OS" == "arch" ]]; then
+    PKG_MANAGER="pacman"
+elif [[ "$OS" == "opensuse" ]]; then
+    PKG_MANAGER="zypper"
+else
     echo "❌ ERROR: Unsupported OS: $OS"
     exit 1
 fi
 
-# ✅ **Step 1: Add Kubernetes APT Repo**
-echo "🔗 Adding Kubernetes repository for $OS..."
-apt-get update
-apt-get install -y apt-transport-https ca-certificates curl gnupg
+echo "🔎 Using package manager: $PKG_MANAGER"
 
-mkdir -p -m 755 /etc/apt/keyrings
-curl -fsSL "https://pkgs.k8s.io/core:/stable:/v${K8S_MAJOR_MINOR}/deb/Release.key" | gpg --dearmor --batch --yes -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
-chmod 644 /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+# ✅ **Step 1: Add Kubernetes Repository & Fetch Packages**
+if [[ "$PKG_MANAGER" == "apt" ]]; then
+    echo "🔗 Adding Kubernetes repository for $OS..."
+    apt-get update
+    apt-get install -y apt-transport-https ca-certificates curl gnupg
 
-echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v${K8S_MAJOR_MINOR}/deb/ /" | tee /etc/apt/sources.list.d/kubernetes.list
-chmod 644 /etc/apt/sources.list.d/kubernetes.list
-apt-get update -y
+    mkdir -p -m 755 /etc/apt/keyrings
+    curl -fsSL "https://pkgs.k8s.io/core:/stable:/v${K8S_MAJOR_MINOR}/deb/Release.key" | gpg --dearmor --batch --yes -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+    chmod 644 /etc/apt/keyrings/kubernetes-apt-keyring.gpg
 
-# ✅ **Step 2: Install Kubernetes (for version validation)**
-echo "📦 Installing Kubernetes version $K8S_VERSION..."
-apt-get install -y --allow-downgrades --allow-change-held-packages kubeadm=${K8S_VERSION}-1.1 kubelet=${K8S_VERSION}-1.1 kubectl=${K8S_VERSION}-1.1 cri-tools conntrack iptables iproute2 ethtool
+    echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v${K8S_MAJOR_MINOR}/deb/ /" | tee /etc/apt/sources.list.d/kubernetes.list
+    chmod 644 /etc/apt/sources.list.d/kubernetes.list
+    apt-get update -y
 
-# ✅ **Step 3: Download Exact Package Versions (All Dependencies)**
-echo "📥 Fetching Kubernetes and dependencies for offline installation..."
+    PKGS="kubeadm=${K8S_VERSION}-1.1 kubelet=${K8S_VERSION}-1.1 kubectl=${K8S_VERSION}-1.1 cri-tools conntrack iptables iproute2 ethtool"
 
-# Define required packages
-KUBE_PACKAGES="kubeadm=${K8S_VERSION}-1.1 kubelet=${K8S_VERSION}-1.1 kubectl=${K8S_VERSION}-1.1 cri-tools conntrack iptables iproute2 ethtool"
+    echo "📥 Downloading Kubernetes packages..."
+    apt-get download --allow-downgrades --allow-change-held-packages $PKGS
 
-# ✅ Fix permissions for apt downloads
-echo "🔧 Fixing permissions for APT downloads..."
-chmod -R a+rwx /var/cache/apt/archives
-chown -R _apt:root /var/cache/apt/archives
+    for pkg in $PKGS; do
+        echo "📥 Downloading dependencies for: $pkg"
+        DEPS=$(apt-cache depends --recurse --no-suggests --no-conflicts --no-replaces --no-breaks --no-enhances --no-pre-depends "$pkg" | grep "^\w" | sort -u)
+        apt-get download --allow-downgrades --allow-change-held-packages $DEPS || echo "⚠️ Warning: Some dependencies could not be downloaded"
+    done
 
-# **Download all packages (ignoring cache)**
-echo "📥 Downloading Kubernetes packages..."
-apt-get download --allow-downgrades --allow-change-held-packages $KUBE_PACKAGES
-
-# **Recursively fetch dependencies for each package**
-for pkg in $KUBE_PACKAGES; do
-    echo "📥 Downloading dependencies for: $pkg"
+elif [[ "$PKG_MANAGER" == "dnf" ]]; then
+    echo "🔗 Enabling Kubernetes repository for $OS..."
+    dnf install -y dnf-plugins-core
+    dnf config-manager --add-repo "https://pkgs.k8s.io/core:/stable:/v${K8S_MAJOR_MINOR}/rpm/"
     
-    # Fix permissions before downloading
-    chmod -R a+rwx /var/cache/apt/archives
-    chown -R _apt:root /var/cache/apt/archives
-
-    # Download dependencies recursively
-    DEPS=$(apt-cache depends --recurse --no-suggests --no-conflicts --no-replaces --no-breaks --no-enhances --no-pre-depends "$pkg" | grep "^\w" | sort -u)
+    PKGS="kubeadm-${K8S_VERSION} kubelet-${K8S_VERSION} kubectl-${K8S_VERSION} cri-tools conntrack iptables iproute ethtool"
     
-    apt-get download --allow-downgrades --allow-change-held-packages $DEPS || echo "⚠️ Warning: Some dependencies could not be downloaded"
-done
+    echo "📥 Downloading Kubernetes packages..."
+    dnf download --resolve $PKGS
 
-# ✅ Move all downloaded `.deb` files to artifacts
-mv *.deb "$DEB_DIR"
+elif [[ "$PKG_MANAGER" == "pacman" ]]; then
+    echo "🔗 Enabling Kubernetes repository for Arch Linux..."
+    pacman -Sy --noconfirm archlinux-keyring
+    pacman -Sy --noconfirm kubeadm kubelet kubectl cri-tools conntrack-tools iptables iproute2 ethtool
 
-# ✅ **Step 4: Create offline package archive**
+    echo "📥 Downloading packages..."
+    pacman -Sw --cachedir="$PKG_DIR" --noconfirm kubeadm kubelet kubectl cri-tools conntrack-tools iptables iproute2 ethtool
+
+elif [[ "$PKG_MANAGER" == "zypper" ]]; then
+    echo "🔗 Enabling Kubernetes repository for OpenSUSE..."
+    zypper ar -f "https://pkgs.k8s.io/core:/stable:/v${K8S_MAJOR_MINOR}/rpm/" Kubernetes
+
+    echo "📥 Downloading packages..."
+    zypper --no-gpg-checks --download-only install -y kubeadm kubelet kubectl cri-tools conntrack iptables iproute2 ethtool
+fi
+
+# ✅ **Step 2: Move all downloaded packages to artifacts**
+mv *.deb *.rpm *.pkg.tar.zst "$PKG_DIR" 2>/dev/null || echo "✅ No extra files to move."
+
+# ✅ **Step 3: Create Offline Package Archive**
 echo "📦 Creating offline package archive: $TAR_FILE"
-tar --exclude="*/partial/*" --ignore-failed-read -czvf "$TAR_FILE" -C "$DEB_DIR" .
+tar --exclude="*/partial/*" --ignore-failed-read -czvf "$TAR_FILE" -C "$PKG_DIR" .
 
-# ✅ **Step 5: Generate Install Script**
+# ✅ **Step 4: Generate Install Script**
 echo "📝 Generating installation script: $INSTALL_SCRIPT"
 cat <<EOF > "$INSTALL_SCRIPT"
 #!/bin/bash
 set -e  # Stop on first error
 
-echo "🚀 Debugging: Installing only available .deb files from /test-env/artifacts/"
+echo "🚀 Installing only available packages from /test-env/artifacts/"
 
-# 📂 List all .deb files to verify what's available
-echo "📂 Listing all .deb files in /test-env/artifacts/:"
-find /test-env/artifacts/ -type f -name "*.deb" -print
-
-# 🔧 Fix permissions for .deb packages
-echo "🔧 Fixing permissions for .deb packages..."
-chmod -R u+rwX /test-env/artifacts  # Ensure read/write/execute permissions
-ls -lah /test-env/artifacts  # Verify ownership & permissions
-
-# ✅ Validate that .deb files exist before proceeding
-if ! find /test-env/artifacts/ -type f -name "*.deb" | grep -q .; then
-    echo "❌ ERROR: No .deb packages found! Exiting..."
+# Detect package manager
+if command -v apt-get &> /dev/null; then
+    PKG_MANAGER="dpkg"
+elif command -v dnf &> /dev/null; then
+    PKG_MANAGER="dnf"
+elif command -v pacman &> /dev/null; then
+    PKG_MANAGER="pacman"
+elif command -v zypper &> /dev/null; then
+    PKG_MANAGER="zypper"
+else
+    echo "❌ ERROR: Unsupported OS"
     exit 1
 fi
 
-export DEBIAN_FRONTEND=noninteractive
+echo "📂 Installing Kubernetes using: \$PKG_MANAGER"
 
-# 📦 **Installing only available .deb packages**
-echo "📦 Installing .deb packages found in /test-env/artifacts/..."
-find /test-env/artifacts/ -type f -name "*.deb" -exec dpkg -i {} + || echo "⚠️ Warning: Some packages may have failed to install."
-
-# 🔧 **Fix any broken dependencies (but only using local files)**
-echo "🔧 Checking for missing dependencies..."
-if ! apt-get --dry-run install --fix-broken | grep -q "0 newly installed"; then
-    echo "⚠️ Warning: Some dependencies may still be missing!"
-    echo "🔎 Listing missing dependencies:"
-    apt-get --dry-run install --fix-broken | grep "Depends:" || echo "✅ No missing dependencies found."
-else
-    echo "✅ No missing dependencies detected."
+if [[ "\$PKG_MANAGER" == "dpkg" ]]; then
+    find /test-env/artifacts/ -type f -name "*.deb" -exec dpkg -i {} + || echo "⚠️ Warning: Some packages may have failed to install."
+elif [[ "\$PKG_MANAGER" == "dnf" ]]; then
+    dnf install -y /test-env/artifacts/*.rpm
+elif [[ "\$PKG_MANAGER" == "pacman" ]]; then
+    pacman -U --noconfirm /test-env/artifacts/*.pkg.tar.zst
+elif [[ "\$PKG_MANAGER" == "zypper" ]]; then
+    zypper install --no-confirm /test-env/artifacts/*.rpm
 fi
 
-# 🔄 **Configure unconfigured packages**
-echo "🔄 Configuring unconfigured packages..."
-dpkg --configure -a || echo "⚠️ Warning: Some packages may still be unconfigured."
-
-# 🔍 **Verify installed Kubernetes components**
-echo "🔍 Verifying installed Kubernetes components..."
-dpkg -l | grep -E "kubeadm|kubelet|kubectl|containerd" || echo "⚠️ Warning: Some Kubernetes components may not be installed."
-
-echo "✅ Validation complete."
-
+echo "✅ Kubernetes installation complete."
 
 EOF
 
 chmod +x "$INSTALL_SCRIPT"
 
-# ✅ **Step 6: Generate SHA256 Checksum**
+# ✅ **Step 5: Generate Checksum**
 echo "🔍 Generating SHA256 checksum file: $CHECKSUM_FILE"
 sha256sum "$TAR_FILE" "$INSTALL_SCRIPT" > "$CHECKSUM_FILE"
 
-# ✅ **Step 7: Generate dependencies.yaml**
+# ✅ **Step 6: Generate dependencies.yaml**
 echo "📜 Generating dependencies.yaml..."
 echo "# Kubernetes Dependencies for $OS (K8S v$K8S_VERSION)" > "$DEPENDENCIES_FILE"
-echo "kubeadm: $K8S_VERSION" >> "$DEPENDENCIES_FILE"
-echo "kubelet: $K8S_VERSION" >> "$DEPENDENCIES_FILE"
-echo "kubectl: $K8S_VERSION" >> "$DEPENDENCIES_FILE"
 
 echo "✅ Kubernetes Offline Build Complete."
