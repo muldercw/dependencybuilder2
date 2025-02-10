@@ -134,40 +134,38 @@ fi
 echo "📝 Verifying paths.txt contents before reading..."
 cat -A /test-env/artifacts/paths.txt  # Shows hidden characters like ^M (Windows newlines)
 
-# 🚨 HARD RESET: Completely rewrite file to ensure no weird encoding issues
+# 🔄 Convert file to clean Unix format (force removal of Windows line endings)
 echo "🔄 Cleaning up paths.txt to ensure proper line endings..."
-tr -d '\r' < /test-env/artifacts/paths.txt | awk '{$1=$1};1' > /test-env/artifacts/paths_cleaned.txt
-mv /test-env/artifacts/paths_cleaned.txt /test-env/artifacts/paths.txt
+sed -i 's/\r$//' /test-env/artifacts/paths.txt  # Remove carriage returns
+sed -i 's/[[:space:]]*$//' /test-env/artifacts/paths.txt  # Remove trailing spaces
 
-# 🚀 Print to confirm that the cleanup worked
 echo "📝 Verifying paths.txt contents after fix..."
-cat -A /test-env/artifacts/paths.txt
+cat -A /test-env/artifacts/paths.txt  # Verify changes applied
 
 echo "📦 Beginning installation of .deb packages..."
-
-# 🛠 Read paths.txt **correctly**, ensuring it actually gets read
 while IFS= read -r PACKAGE_PATH || [[ -n "$PACKAGE_PATH" ]]; do
     echo "🔹 Debug: Read raw line -> '$PACKAGE_PATH'"
 
-    # 🚨 Ensure each line is actually getting stored properly
-    PACKAGE_PATH=$(echo "$PACKAGE_PATH" | tr -d '\r' | xargs)  # Force clean input
+    # Strip out remaining unwanted characters
+    PACKAGE_PATH=$(echo "$PACKAGE_PATH" | tr -d '\r' | xargs)
 
     # Skip empty lines
     if [[ -z "$PACKAGE_PATH" ]]; then
         echo "⚠️ Skipping empty line"
-        continue 
+        continue
     fi
 
-    # 🚨 Check if file actually exists
-    if [[ -f "$PACKAGE_PATH" ]]; then
-        echo "✅ Installing: $PACKAGE_PATH"
-        dpkg -i "$PACKAGE_PATH" || echo "⚠️ Warning: Failed to install $PACKAGE_PATH"
-    else
+    # 🚨 Verify the file exists
+    if [[ ! -f "$PACKAGE_PATH" ]]; then
         echo "❌ ERROR: File not found - $PACKAGE_PATH"
+        continue
     fi
+
+    echo "✅ Installing: $PACKAGE_PATH"
+    dpkg -i "$PACKAGE_PATH" || echo "⚠️ Warning: Failed to install $PACKAGE_PATH"
 
     echo "-----------------------------------"
-done < /test-env/artifacts/paths.txt
+done < <(cat /test-env/artifacts/paths.txt)  # Ensures it's read as expected
 
 echo "✅ All installations complete."
 
