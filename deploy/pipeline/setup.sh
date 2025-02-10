@@ -134,15 +134,14 @@ fi
 echo "📝 Verifying paths.txt contents before reading..."
 cat -A /test-env/artifacts/paths.txt  # Shows hidden characters like ^M (Windows newlines)
 
-# Convert to Unix format in case of Windows line endings
-dos2unix /test-env/artifacts/paths.txt 2>/dev/null || echo "ℹ️ Skipping dos2unix (not installed)"
+# Convert to Unix format (fixes Windows-style CRLF issues)
+echo "🔄 Converting paths.txt to Unix format..."
+tr -d '\r' < /test-env/artifacts/paths.txt > /test-env/artifacts/cleaned_paths.txt
+mv /test-env/artifacts/cleaned_paths.txt /test-env/artifacts/paths.txt
 
-# Read each package path from paths.txt and install one by one
+# Read each package path from paths.txt and install
 while IFS= read -r PACKAGE_PATH || [[ -n "$PACKAGE_PATH" ]]; do
     echo "🔹 Debug: Read raw line -> '$PACKAGE_PATH'"
-
-    # Strip possible carriage return characters (\r from Windows format)
-    PACKAGE_PATH=$(echo "$PACKAGE_PATH" | tr -d '\r')
 
     # Skip empty lines
     if [[ -z "$PACKAGE_PATH" ]]; then
