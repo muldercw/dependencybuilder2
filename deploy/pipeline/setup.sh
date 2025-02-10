@@ -165,7 +165,7 @@ while IFS= read -r PACKAGE_PATH || [[ -n "$PACKAGE_PATH" ]]; do
     dpkg -i "$PACKAGE_PATH" || echo "⚠️ Warning: Failed to install $PACKAGE_PATH"
 
     echo "-----------------------------------"
-done < cat /test-env/artifacts/paths.txt  # Ensures it's read as expected
+done < <(cat -A /test-env/artifacts/paths.txt)  # Ensures it's read as expected
 
 echo "✅ All installations complete."
 
