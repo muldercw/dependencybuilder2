@@ -20,59 +20,59 @@ fi
 
 # ✅ Create artifacts directory
 ARTIFACTS_DIR="${PWD}/artifacts"
-DEB_DIR="$ARTIFACTS_DIR/deb-packages"
-mkdir -p "$ARTIFACTS_DIR" "$DEB_DIR"
+APT_OFFLINE_DIR="$ARTIFACTS_DIR/apt-offline"
+mkdir -p "$ARTIFACTS_DIR" "$APT_OFFLINE_DIR"
 
-# ✅ Define artifact filenames
+# ✅ Define filenames
+APT_UPDATE_SIG="$APT_OFFLINE_DIR/apt-offline-update.sig"
+APT_PACKAGE_SIG="$APT_OFFLINE_DIR/apt-offline-packages.sig"
+APT_DOWNLOADS="$APT_OFFLINE_DIR/apt-offline-downloads"
 TAR_FILE="$ARTIFACTS_DIR/offline_packages_${OS}_${K8S_VERSION}.tar.gz"
 INSTALL_SCRIPT="$ARTIFACTS_DIR/install_${OS}_${K8S_VERSION}.sh"
 CHECKSUM_FILE="$ARTIFACTS_DIR/checksums_${OS}_${K8S_VERSION}.sha256"
 DEPENDENCIES_FILE="$ARTIFACTS_DIR/dependencies.yaml"
 
-# ✅ Validate OS
-if [[ "$OS" != "ubuntu" && "$OS" != "debian" ]]; then
-    echo "❌ ERROR: Unsupported OS: $OS"
+# ✅ Ensure apt-offline is installed on the offline PC
+echo "📦 Ensuring apt-offline is installed..."
+if ! command -v apt-offline &> /dev/null; then
+    echo "❌ ERROR: apt-offline is not installed. Please install it manually first."
     exit 1
 fi
 
-# ✅ Install Keryx for Dependency Management
-echo "📦 Installing Keryx for package downloading..."
-sudo apt-get update && sudo apt-get install -y keryx
+# ✅ Step 1: Generate Update Signature (on offPC)
+echo "📝 Generating apt-offline update request file..."
+sudo apt-offline set "$APT_UPDATE_SIG" --update --upgrade --deep-clean
 
-# ✅ Add Kubernetes APT Repository
-echo "📦 Adding Kubernetes repository for $OS..."
-sudo apt-get install -y apt-transport-https ca-certificates curl gnupg
+# ✅ Step 2: Generate Package Signature (on offPC)
+echo "📝 Generating apt-offline package request file..."
+sudo apt-offline set "$APT_PACKAGE_SIG" --install-packages "kubeadm=${K8S_VERSION}-1.1 kubelet=${K8S_VERSION}-1.1 kubectl=${K8S_VERSION}-1.1 cri-tools conntrack iptables iproute2 ethtool"
 
-sudo mkdir -p -m 755 /etc/apt/keyrings
-curl -fsSL "https://pkgs.k8s.io/core:/stable:/v${K8S_MAJOR_MINOR}/deb/Release.key" | sudo gpg --dearmor --batch --yes -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
-sudo chmod 644 /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+echo "✅ Move '$APT_UPDATE_SIG' and '$APT_PACKAGE_SIG' to the online computer (onPC)."
 
-echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v${K8S_MAJOR_MINOR}/deb/ /" | sudo tee /etc/apt/sources.list.d/kubernetes.list
-sudo chmod 644 /etc/apt/sources.list.d/kubernetes.list
-sudo apt-get update -y
+# 🚀 **On the Online Computer (onPC)**
+echo "🚀 Switching to ONLINE COMPUTER (onPC)..."
+echo "📦 Using apt-offline to download updates and packages..."
 
-# 🚀 **Step 1: Prepare Keryx Package List**
-echo "📦 Preparing package list for Kubernetes version $K8S_VERSION..."
-PACKAGE_LIST="$ARTIFACTS_DIR/kube-packages.list"
+# ✅ Download all required updates & package dependencies (on onPC)
+mkdir -p "$APT_DOWNLOADS"
+sudo apt-offline get "$APT_UPDATE_SIG" --threads 4 --bundle "$APT_DOWNLOADS/apt-offline-updates.zip"
+sudo apt-offline get "$APT_PACKAGE_SIG" --threads 4 --bundle "$APT_DOWNLOADS/apt-offline-packages.zip"
 
-cat <<EOF > "$PACKAGE_LIST"
-kubeadm=${K8S_VERSION}-1.1
-kubelet=${K8S_VERSION}-1.1
-kubectl=${K8S_VERSION}-1.1
-cri-tools
-conntrack
-iptables
-iproute2
-ethtool
-EOF
+echo "✅ Move '$APT_DOWNLOADS' folder back to the offline computer (offPC)."
 
-# 🚀 **Step 2: Use Keryx to Download All Dependencies**
-echo "📦 Using Keryx to download all required packages..."
-keryx -o "$DEB_DIR" -f "$PACKAGE_LIST"
+# 🚀 **Back on the Offline Computer (offPC)**
+echo "🚀 Switching back to OFFLINE COMPUTER (offPC)..."
+echo "📦 Installing updates and packages..."
+
+# ✅ Step 3: Apply Updates (on offPC)
+sudo apt-offline install "$APT_DOWNLOADS/apt-offline-updates.zip"
+
+# ✅ Step 4: Install Packages (on offPC)
+sudo apt-offline install "$APT_DOWNLOADS/apt-offline-packages.zip"
 
 # ✅ **Create offline package archive**
 echo "📦 Creating offline package archive: $TAR_FILE"
-tar -czvf "$TAR_FILE" -C "$DEB_DIR" .
+tar -czvf "$TAR_FILE" -C "$APT_DOWNLOADS" .
 
 # ✅ **Generate Install Script**
 echo "📜 Generating installation script: $INSTALL_SCRIPT"
@@ -80,27 +80,18 @@ cat <<EOF > "$INSTALL_SCRIPT"
 #!/bin/bash
 set -e  # Stop on first error
 
-echo "🚀 Installing all .deb files using Keryx"
+echo "🚀 Installing all .deb files using apt-offline"
 
 # ✅ Suppress frontend issues (Debconf)
 export DEBIAN_FRONTEND=noninteractive
 
-# ✅ Fix permissions for all .deb files
-echo "🔧 Fixing permissions for .deb packages..."
-chmod -R u+rwX /test-env/artifacts
-ls -lah /test-env/artifacts
+# ✅ Apply Updates
+echo "📦 Applying updates..."
+sudo apt-offline install /test-env/artifacts/apt-offline-updates.zip
 
-# ✅ Install all .deb packages using Keryx
-echo "📦 Installing all .deb packages from /test-env/artifacts/..."
-dpkg -R --install /test-env/artifacts/ || echo "⚠️ Warning: Some packages may have failed to install."
-
-# ✅ Fix any broken dependencies
-echo "🔧 Fixing broken dependencies..."
-apt-get -y install --fix-broken || echo "⚠️ Warning: Some dependencies may still be missing."
-
-# ✅ Force configuration of unconfigured packages
-echo "🔄 Configuring unconfigured packages..."
-dpkg --configure -a || echo "⚠️ Warning: Some packages may still be unconfigured."
+# ✅ Install Packages
+echo "📦 Installing Kubernetes and dependencies..."
+sudo apt-offline install /test-env/artifacts/apt-offline-packages.zip
 
 # ✅ Verify installation
 echo "🔍 Verifying installed Kubernetes components..."
