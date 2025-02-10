@@ -127,10 +127,23 @@ set -e  # Stop on first error
 echo "🚀 Installing only available packages from /test-env/artifacts/"
 PKG_DIR="/test-env/artifacts/"
 
-# Detect OS & Package Manager
+# ✅ **Step 1: Detect OS Properly**
 if [[ -f "/etc/os-release" ]]; then
     source /etc/os-release
     OS_ID="$ID"
+elif [[ -x "$(command -v lsb_release)" ]]; then
+    OS_ID=$(lsb_release -si | awk '{print tolower($1)}')
+elif [[ -f "/etc/debian_version" ]]; then
+    OS_ID="debian"
+elif [[ -f "/etc/redhat-release" ]]; then
+    OS_ID="rhel"
+elif [[ -f "/etc/SuSE-release" ]]; then
+    OS_ID="suse"
+elif [[ -x "$(command -v uname)" ]]; then
+    KERNEL_NAME=$(uname -s)
+    if [[ "$KERNEL_NAME" == "Linux" ]]; then
+        OS_ID="linux"
+    fi
 else
     echo "❌ ERROR: Unable to detect OS."
     exit 1
@@ -138,16 +151,16 @@ fi
 
 echo "🔍 Detected OS: $OS_ID"
 
-# Determine the package manager based on the OS
+# ✅ **Step 2: Determine Package Manager**
 if [[ "$OS_ID" == "ubuntu" || "$OS_ID" == "debian" ]]; then
     PKG_MANAGER="dpkg"
-elif [[ "$OS_ID" == "rocky" || "$OS_ID" == "centos" ]]; then
+elif [[ "$OS_ID" == "rhel" || "$OS_ID" == "rocky" || "$OS_ID" == "centos" ]]; then
     PKG_MANAGER="dnf"
 elif [[ "$OS_ID" == "fedora" ]]; then
     PKG_MANAGER="dnf_fedora"
 elif [[ "$OS_ID" == "arch" ]]; then
     PKG_MANAGER="pacman"
-elif [[ "$OS_ID" == "opensuse" ]]; then
+elif [[ "$OS_ID" == "suse" || "$OS_ID" == "opensuse" ]]; then
     PKG_MANAGER="zypper"
 else
     echo "❌ ERROR: Unsupported OS: $OS_ID"
@@ -156,44 +169,37 @@ fi
 
 echo "📂 Installing Kubernetes using: $PKG_MANAGER"
 
-# 📌 **Ubuntu/Debian (dpkg)**
+# ✅ **Step 3: Install Kubernetes Components**
 if [[ "$PKG_MANAGER" == "dpkg" ]]; then
     echo "📦 Installing .deb packages..."
     find "$PKG_DIR" -type f -name "*.deb" -exec dpkg -i {} + || echo "⚠️ Warning Some packages may have failed to install."
     echo "🔧 Fixing broken dependencies..."
     apt-get -y install --fix-broken || echo "⚠️ Warning Some dependencies may still be missing."
 
-# 📌 **CentOS/Rocky (dnf)**
 elif [[ "$PKG_MANAGER" == "dnf" ]]; then
     echo "📦 Installing .rpm packages..."
     dnf install -y "$PKG_DIR"/*.rpm || echo "⚠️ Warning Some packages may have failed to install."
 
-# 📌 **Fedora (dnf but different)**
 elif [[ "$PKG_MANAGER" == "dnf_fedora" ]]; then
     echo "🔄 Refreshing Fedora metadata... (SKIPPED - Airgapped Mode)"
     echo "📦 Installing .rpm packages..."
     dnf install -y "$PKG_DIR"/*.rpm || echo "⚠️ Warning Some packages may have failed to install."
 
-# 📌 **Arch Linux (pacman)**
 elif [[ "$PKG_MANAGER" == "pacman" ]]; then
-    echo "🔍 Checking for locally available packages..."
-    
-    # ✅ **Fix: Ensure pacman does NOT attempt to refresh databases in an air-gapped setup**
+    echo "🔍 Checking pacman database..."
     if [[ ! -f /var/lib/pacman/sync/core.db ]]; then
         echo "⚠️ Skipping database sync (air-gapped mode)..."
     fi
-    
     echo "📦 Installing pre-downloaded .pkg.tar.zst packages..."
     find "$PKG_DIR" -type f -name "*.pkg.tar.zst" -exec pacman -U --noconfirm {} + || echo "⚠️ Warning Some packages may have failed to install."
 
-# 📌 **OpenSUSE (zypper)**
 elif [[ "$PKG_MANAGER" == "zypper" ]]; then
     echo "🔄 Refreshing Zypper metadata... (SKIPPED - Airgapped Mode)"
     echo "📦 Installing .rpm packages..."
     zypper --non-interactive install "$PKG_DIR"/*.rpm || echo "⚠️ Warning Some packages may have failed to install."
 fi
 
-# ✅ Final Verification
+# ✅ **Final Verification**
 echo "🔍 Verifying installed Kubernetes components..."
 case "$PKG_MANAGER" in
     dpkg) dpkg -l | grep -E "kubeadm|kubelet|kubectl|containerd" 2>/dev/null || echo "⚠️ Warning Some Kubernetes components may not be installed." ;;
@@ -202,6 +208,7 @@ case "$PKG_MANAGER" in
 esac
 
 echo "✅ Kubernetes installation complete."
+
 
 EOF
 
