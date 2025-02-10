@@ -30,27 +30,10 @@ INSTALL_SCRIPT="$ARTIFACTS_DIR/install_${OS}_${K8S_VERSION}.sh"
 CHECKSUM_FILE="$ARTIFACTS_DIR/checksums_${OS}_${K8S_VERSION}.sha256"
 DEPENDENCIES_FILE="$ARTIFACTS_DIR/dependencies.yaml"
 
-# Determine Package Manager
+# ✅ Step 1: Detect OS and Setup Kubernetes Repository
+
 if [[ "$OS" == "ubuntu" || "$OS" == "debian" ]]; then
-    PKG_MANAGER="apt"
-elif [[ "$OS" == "centos" || "$OS" == "rocky" ]]; then
-    PKG_MANAGER="dnf"
-elif [[ "$OS" == "fedora" ]]; then
-    PKG_MANAGER="dnf_fedora"
-elif [[ "$OS" == "arch" ]]; then
-    PKG_MANAGER="pacman"
-elif [[ "$OS" == "opensuse" ]]; then
-    PKG_MANAGER="zypper"
-else
-    echo "❌ ERROR: Unsupported OS: $OS"
-    exit 1
-fi
-
-echo "🔎 Using package manager: $PKG_MANAGER"
-
-# ✅ **Step 1: Add Kubernetes Repository & Fetch Packages**
-if [[ "$PKG_MANAGER" == "apt" ]]; then
-    echo "🔗 Adding Kubernetes repository for $OS..."
+    echo "🔗 Configuring Kubernetes repository for $OS..."
     apt-get update
     apt-get install -y apt-transport-https ca-certificates curl gnupg
 
@@ -73,8 +56,8 @@ if [[ "$PKG_MANAGER" == "apt" ]]; then
         apt-get download --allow-downgrades --allow-change-held-packages $DEPS || echo "⚠️ Warning: Some dependencies could not be downloaded"
     done
 
-elif [[ "$PKG_MANAGER" == "dnf" ]]; then
-    echo "🔗 Enabling Kubernetes repository for CentOS/Rocky..."
+elif [[ "$OS" == "centos" || "$OS" == "rocky" ]]; then
+    echo "🔗 Configuring Kubernetes repository for CentOS/Rocky..."
     dnf install -y dnf-plugins-core
     dnf config-manager --add-repo "https://pkgs.k8s.io/core:/stable:/v${K8S_MAJOR_MINOR}/rpm/"
 
@@ -83,8 +66,8 @@ elif [[ "$PKG_MANAGER" == "dnf" ]]; then
     echo "📥 Downloading Kubernetes packages..."
     dnf download --resolve $PKGS
 
-elif [[ "$PKG_MANAGER" == "dnf_fedora" ]]; then
-    echo "🔗 Enabling Kubernetes repository for Fedora..."
+elif [[ "$OS" == "fedora" ]]; then
+    echo "🔗 Configuring Kubernetes repository for Fedora..."
     cat <<EOF > /etc/yum.repos.d/kubernetes.repo
 [kubernetes]
 name=Kubernetes Repository
@@ -100,7 +83,7 @@ EOF
     echo "📥 Downloading Kubernetes packages..."
     dnf download --resolve $PKGS
 
-elif [[ "$PKG_MANAGER" == "pacman" ]]; then
+elif [[ "$OS" == "arch" ]]; then
     echo "🔗 Configuring Arch Linux repository..."
     pacman-key --init
     pacman-key --populate archlinux
@@ -117,8 +100,8 @@ elif [[ "$PKG_MANAGER" == "pacman" ]]; then
         fi
     done
 
-elif [[ "$PKG_MANAGER" == "zypper" ]]; then
-    echo "🔗 Enabling Kubernetes repository for OpenSUSE..."
+elif [[ "$OS" == "opensuse" ]]; then
+    echo "🔗 Configuring Kubernetes repository for OpenSUSE..."
     zypper --gpg-auto-import-keys refresh
     zypper --non-interactive install --download-only kubeadm kubelet kubectl cri-tools conntrack iptables iproute2 ethtool
 fi
@@ -131,6 +114,42 @@ echo "📦 Creating offline package archive: $TAR_FILE"
 tar --exclude="*/partial/*" --ignore-failed-read -czvf "$TAR_FILE" -C "$PKG_DIR" .
 
 # ✅ **Step 4: Generate Install Script**
+echo "📝 Generating installation script: $INSTALL_SCRIPT"
+cat <<EOF > "$INSTALL_SCRIPT"
+#!/bin/bash
+set -e  # Stop on first error
+
+echo "🚀 Installing only available packages from /test-env/artifacts/"
+
+# Detect package manager
+if command -v apt-get &> /dev/null; then
+    PKG_MANAGER="dpkg"
+elif command -v dnf &> /dev/null; then
+    PKG_MANAGER="dnf"
+elif command -v pacman &> /dev/null; then
+    PKG_MANAGER="pacman"
+elif command -v zypper &> /dev/null; then
+    PKG_MANAGER="zypper"
+else
+    echo "❌ ERROR: Unsupported OS"
+    exit 1
+fi
+
+echo "📂 Installing Kubernetes using: \$PKG_MANAGER"
+
+if [[ "\$PKG_MANAGER" == "dpkg" ]]; then
+    find /test-env/artifacts/ -type f -name "*.deb" -exec dpkg -i {} + || echo "⚠️ Warning: Some packages may have failed to install."
+elif [[ "\$PKG_MANAGER" == "dnf" ]]; then
+    dnf install -y /test-env/artifacts/*.rpm
+elif [[ "\$PKG_MANAGER" == "pacman" ]]; then
+    pacman -U --noconfirm /test-env/artifacts/*.pkg.tar.zst
+elif [[ "\$PKG_MANAGER" == "zypper" ]]; then
+    zypper install --no-confirm /test-env/artifacts/*.rpm
+fi
+
+echo "✅ Kubernetes installation complete."
+EOF
+
 chmod +x "$INSTALL_SCRIPT"
 
 echo "✅ Kubernetes Offline Build Complete."
