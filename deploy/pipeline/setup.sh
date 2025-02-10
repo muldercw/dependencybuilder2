@@ -92,11 +92,27 @@ echo "🔧 Fixing permissions for .deb packages..."
 chmod -R u+rwX /test-env/artifacts  # Ensure read/write/execute permissions
 ls -lah /test-env/artifacts  # Verify ownership & permissions
 
-# ✅ Install all packages with dependencies, allowing downgrades
-echo "📦 Installing all .deb packages..."
+# ✅ Suppress frontend issues (Debconf)
+export DEBIAN_FRONTEND=noninteractive
+
+# ✅ Install all .deb packages, allowing downgrades and ignoring conflicts
+echo "📦 Installing all .deb packages from /test-env/artifacts/..."
 dpkg -R --install /test-env/artifacts/ || echo "⚠️ Warning: Some packages may have failed to install."
 
+# ✅ Fix any broken dependencies
+echo "🔧 Fixing broken dependencies..."
+apt-get -y install --fix-broken || echo "⚠️ Warning: Some dependencies may still be missing."
+
+# ✅ Force configuration of unconfigured packages
+echo "🔄 Configuring unconfigured packages..."
+dpkg --configure -a || echo "⚠️ Warning: Some packages may still be unconfigured."
+
+# ✅ Verify installation
+echo "🔍 Verifying installed Kubernetes components..."
+dpkg -l | grep -E "kubeadm|kubelet|kubectl"
+
 echo "✅ All installations complete."
+
 EOF
 
 chmod +x "$INSTALL_SCRIPT"
