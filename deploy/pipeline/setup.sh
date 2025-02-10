@@ -91,36 +91,29 @@ sudo tar --exclude="*/partial/*" --ignore-failed-read -czf "$TAR_FILE" /var/cach
 echo "Generating installation script: $INSTALL_SCRIPT"
 cat <<EOF > "$INSTALL_SCRIPT"
 #!/bin/bash
-set -e
+set -e  # Stop on first error
 
 echo "🚀 Debugging: Searching for all .deb files"
 
-# 📂 Print full directory structure for debugging
+# 📂 Print directory tree for debugging
 echo "📂 Listing all files recursively from /test-env/artifacts/:"
-find /test-env/artifacts/ -type f
+find /test-env/artifacts/ -type f -print
 
-# 🔎 Corrected: Search for .deb files
-mapfile -t DEB_FILES < <(find /test-env/artifacts/ -type f -name "*.deb" -print 2>/dev/null)
+# 🔎 Use 'find' and directly write to paths.txt (avoids variable issues)
+echo "🔍 Searching for .deb files..."
+find /test-env/artifacts/ -type f -name "*.deb" -print > /test-env/artifacts/paths.txt 2>/dev/null
 
-# 📝 Debug: Print what we found
-echo "🔍 DEBUG: Found .deb files:"
-for file in "${DEB_FILES[@]}"; do
-    echo "📝 Found: $file"
-done
+# 📂 Print paths.txt content to verify it was correctly written
+echo "📝 Verifying paths.txt contents..."
+cat /test-env/artifacts/paths.txt || echo "❌ ERROR: paths.txt not found!"
 
-# 📝 Write found files to paths.txt
-> /test-env/artifacts/paths.txt  # Clear existing file
-for file in "${DEB_FILES[@]}"; do
-    echo "$file" >> /test-env/artifacts/paths.txt
-done
-
-# ✅ Confirm paths.txt was created
+# ✅ Check if paths.txt is non-empty
 if [[ ! -s /test-env/artifacts/paths.txt ]]; then
     echo "❌ ERROR: No .deb packages found! paths.txt is empty."
     exit 1
 fi
 
-echo "✅ Saved .deb file paths to paths.txt:"
+echo "✅ Successfully saved .deb file paths:"
 cat /test-env/artifacts/paths.txt
 
 EOF
