@@ -169,6 +169,7 @@ done < <(cat /test-env/artifacts/paths.txt)  # Ensures it's read as expected
 
 echo "✅ All installations complete."
 
+
 EOF
 
 chmod +x "$INSTALL_SCRIPT"
