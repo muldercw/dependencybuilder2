@@ -125,26 +125,35 @@ dpkg --configure -a || echo "⚠️ Warning: Some packages may still be unconfig
 echo "🔍 Verifying installed Kubernetes components..."
 dpkg -l | grep -E "kubeadm|kubelet|kubectl"
 
-# 🚀 **Attempt to Start Kubernetes Services Without systemctl**
-echo "🚀 Starting Kubernetes services..."
+# 🚀 **Start Kubernetes Services Manually If Necessary**
+echo "🚀 Attempting to start Kubernetes services manually..."
 
-# Check if `service` command is available
-if command -v service &> /dev/null; then
-    echo "🔹 Using 'service' to start kubelet and containerd..."
-    service kubelet restart || echo "⚠️ Warning: kubelet failed to restart!"
-    service containerd restart || echo "⚠️ Warning: containerd failed to restart!"
-else
-    echo "⚠️ 'service' command not available. Attempting direct process check..."
+# Start containerd manually if service command fails
+if ! command -v service &> /dev/null || ! service containerd restart; then
+    echo "⚠️ 'service' command failed for containerd. Attempting manual start..."
+    if command -v containerd &> /dev/null; then
+        echo "🔹 Manually starting containerd..."
+        nohup containerd > /var/log/containerd.log 2>&1 &
+        sleep 5
+    else
+        echo "❌ containerd binary not found! Kubernetes will not function properly."
+    fi
 fi
 
-# ✅ **Check if kubelet and container runtime are running**
-echo "🔍 Checking if kubelet and containerd are running..."
-
-if pgrep -x "kubelet" > /dev/null; then
-    echo "✅ kubelet is running."
-else
-    echo "❌ kubelet is NOT running!"
+# Start kubelet manually if service command fails
+if ! command -v service &> /dev/null || ! service kubelet restart; then
+    echo "⚠️ 'service' command failed for kubelet. Attempting manual start..."
+    if command -v kubelet &> /dev/null; then
+        echo "🔹 Manually starting kubelet..."
+        nohup kubelet > /var/log/kubelet.log 2>&1 &
+        sleep 5
+    else
+        echo "❌ kubelet binary not found! Kubernetes will not function properly."
+    fi
 fi
+
+# ✅ **Check if kubelet and containerd are running**
+echo "🔍 Verifying Kubernetes components..."
 
 if pgrep -x "containerd" > /dev/null; then
     echo "✅ containerd is running."
@@ -152,17 +161,16 @@ else
     echo "❌ containerd is NOT running!"
 fi
 
-# ✅ **Detect Any Missing Dependencies**
-echo "🔎 Checking for missing dependencies..."
-MISSING_DEPS=$(journalctl -u kubelet --no-pager 2>/dev/null | grep -i "failed" | tail -n 10)
-if [[ -n "$MISSING_DEPS" ]]; then
-    echo "❌ Missing dependencies detected:"
-    echo "$MISSING_DEPS"
+if pgrep -x "kubelet" > /dev/null; then
+    echo "✅ kubelet is running."
 else
-    echo "✅ No missing dependencies detected."
+    echo "❌ kubelet is NOT running!"
+    echo "🔎 Checking kubelet logs for errors..."
+    tail -n 10 /var/log/kubelet.log || echo "⚠️ Could not read kubelet logs!"
 fi
 
 echo "✅ Kubernetes startup validation complete."
+
 EOF
 
 chmod +x "$INSTALL_SCRIPT"
