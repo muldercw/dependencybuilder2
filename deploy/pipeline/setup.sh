@@ -93,10 +93,10 @@ cat <<EOF > "$INSTALL_SCRIPT"
 #!/bin/bash
 set -e  # Stop on first error
 
-echo "🚀 Debugging: Searching for all .deb files"
+echo "🚀 Debugging: Installing all .deb files recursively"
 
 # 📂 Print directory tree for debugging
-echo "📂 Listing all files recursively from /test-env/artifacts/:"
+echo "📂 Listing all files in /test-env/artifacts/:"
 find /test-env/artifacts/ -type f -print
 
 # 🔧 Fix permissions for all .deb files
@@ -104,38 +104,12 @@ echo "🔧 Fixing permissions for .deb packages..."
 chmod -R u+rwX /test-env/artifacts  # Ensure read/write/execute permissions
 ls -lah /test-env/artifacts  # Verify ownership & permissions
 
-# 🔎 Find and Install .deb Files
-echo "🔍 Searching for .deb files..."
-DEB_FILES=$(find /test-env/artifacts/ -type f -name "*.deb" 2>/dev/null)
-
-# 📝 Verify found packages
-if [[ -z "$DEB_FILES" ]]; then
-    echo "❌ ERROR: No .deb packages found!"
-    exit 1
-fi
-
-echo "✅ Found the following .deb packages:"
-echo "$DEB_FILES"
-
-# 🚀 INSTALLING PACKAGES
-echo "📦 Beginning installation of .deb packages..."
-for PACKAGE_PATH in $DEB_FILES; do
-    echo "-----------------------------------"
-    echo "🔹 Installing: $PACKAGE_PATH"
-
-    # 🚨 Verify file exists
-    if [[ ! -f "$PACKAGE_PATH" ]]; then
-        echo "❌ ERROR: File not found - $PACKAGE_PATH"
-        continue
-    fi
-
-    # 🛠 Install package
-    dpkg -i "$PACKAGE_PATH" || echo "⚠️ Warning: Failed to install $PACKAGE_PATH"
-
-    echo "✅ Installed: $PACKAGE_PATH"
-done
+# 🚀 INSTALLING PACKAGES RECURSIVELY
+echo "📦 Installing all .deb packages from /test-env/artifacts/..."
+dpkg -R --install /test-env/artifacts/ || echo "⚠️ Warning: Some packages may have failed to install."
 
 echo "✅ All installations complete."
+
 
 EOF
 
