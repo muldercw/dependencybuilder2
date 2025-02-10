@@ -66,7 +66,7 @@ elif [[ "$OS" == "rocky" ]]; then
     dnf makecache --refresh
 
 
-    PKGS="kubeadm-${K8S_VERSION} kubelet-${K8S_VERSION} kubectl-${K8S_VERSION} cri-tools conntrack-tools iptables iproute. ethtool"
+    PKGS="kubeadm kubelet kubectl cri-tools conntrack-tools iptables iproute. ethtool"
 
     echo "📥 Downloading Kubernetes packages for architecture: $ARCH..."
     dnf download --resolve --arch=${ARCH} $PKGS
