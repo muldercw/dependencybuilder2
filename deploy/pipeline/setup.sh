@@ -1,20 +1,20 @@
 #!/bin/bash
-set -e
+set -e  # Stop on first error
 
 OS=$1
 K8S_VERSION=$2
 
-# 🔧 Remove any extra quotes around the Kubernetes version
+# 🔧 Remove any extra quotes
 K8S_VERSION=$(echo "$K8S_VERSION" | tr -d '"')
 
-# 🔧 Extract only major.minor version for repo setup (e.g., "1.29" from "1.29.13")
+# 🔧 Extract only major.minor version (e.g., "1.29" from "1.29.13")
 K8S_MAJOR_MINOR=$(echo "$K8S_VERSION" | cut -d'.' -f1,2)
 
 echo "Starting setup for OS: $OS with Kubernetes version: $K8S_VERSION (Repo version: $K8S_MAJOR_MINOR)"
 
 # Validate Kubernetes Version
 if [[ -z "$K8S_VERSION" ]]; then
-    echo "Error: Kubernetes version is not set! Ensure the GitHub Actions workflow is correctly passing it."
+    echo "❌ ERROR: Kubernetes version is not set!"
     exit 1
 fi
 
@@ -27,65 +27,49 @@ TAR_FILE="$ARTIFACTS_DIR/offline_packages_${OS}_${K8S_VERSION}.tar.gz"
 INSTALL_SCRIPT="$ARTIFACTS_DIR/install_${OS}_${K8S_VERSION}.sh"
 CHECKSUM_FILE="$ARTIFACTS_DIR/checksums_${OS}_${K8S_VERSION}.sha256"
 DEPENDENCIES_FILE="$ARTIFACTS_DIR/dependencies.yaml"
+DEB_DIR="$ARTIFACTS_DIR/deb-packages"
 
-# Define package manager commands
-declare -A OS_MAP
-OS_MAP[ubuntu]="apt"
-OS_MAP[debian]="apt"
-OS_MAP[almalinux]="dnf"
-OS_MAP[centos]="dnf"
-OS_MAP[rocky]="dnf"
-OS_MAP[fedora]="dnf"
-OS_MAP[arch]="pacman"
-OS_MAP[opensuse]="zypper"
-
-declare -A INSTALL_CMDS
-INSTALL_CMDS[apt]="dpkg -i"
-INSTALL_CMDS[dnf]="dnf install -y"
-INSTALL_CMDS[pacman]="pacman -U --noconfirm"
-INSTALL_CMDS[zypper]="zypper install --no-confirm"
+mkdir -p "$DEB_DIR"
 
 # Validate OS
-if [[ -z "${OS_MAP[$OS]}" ]]; then
-    echo "Unsupported OS: $OS"
+if [[ "$OS" != "ubuntu" && "$OS" != "debian" ]]; then
+    echo "❌ ERROR: Unsupported OS: $OS"
     exit 1
 fi
 
-PKG_MANAGER="${OS_MAP[$OS]}"
-INSTALL_CMD="${INSTALL_CMDS[$PKG_MANAGER]}"
-
-# Validate Kubernetes repository URL before proceeding
-KUBE_URL="https://pkgs.k8s.io/core:/stable:/v${K8S_MAJOR_MINOR}/deb/Release.key"
-
-if ! curl -IfsSL "$KUBE_URL"; then
-    echo "Error: The Kubernetes repository URL returned 403 Forbidden!"
-    echo "Check if Kubernetes version '$K8S_MAJOR_MINOR' exists."
-    exit 1
-fi
-
-# Add Kubernetes repository
+# Kubernetes APT Repo
 echo "Adding Kubernetes repository for $OS..."
+sudo apt-get update
+sudo apt-get install -y apt-transport-https ca-certificates curl gnupg
 
-if [[ "$PKG_MANAGER" == "apt" ]]; then
-    sudo apt-get update
-    sudo apt-get install -y apt-transport-https ca-certificates curl gnupg
+sudo mkdir -p -m 755 /etc/apt/keyrings
+curl -fsSL "https://pkgs.k8s.io/core:/stable:/v${K8S_MAJOR_MINOR}/deb/Release.key" | sudo gpg --dearmor --batch --yes -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+sudo chmod 644 /etc/apt/keyrings/kubernetes-apt-keyring.gpg
 
-    sudo mkdir -p -m 755 /etc/apt/keyrings
-    curl -fsSL "$KUBE_URL" | sudo gpg --dearmor --batch --yes -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
-    sudo chmod 644 /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v${K8S_MAJOR_MINOR}/deb/ /" | sudo tee /etc/apt/sources.list.d/kubernetes.list
+sudo chmod 644 /etc/apt/sources.list.d/kubernetes.list
+sudo apt-get update -y
 
-    echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v${K8S_MAJOR_MINOR}/deb/ /" | sudo tee /etc/apt/sources.list.d/kubernetes.list
-    sudo chmod 644 /etc/apt/sources.list.d/kubernetes.list
-    sudo apt-get update -y
-fi
+# 🔽 **Download Required Packages & Dependencies**
+echo "📦 Downloading Kubernetes and dependencies for offline installation..."
 
-# Install Kubernetes Components
-echo "Installing Kubernetes components for $OS..."
-sudo apt-get install -y --allow-downgrades kubeadm=${K8S_VERSION}-1.1 kubelet=${K8S_VERSION}-1.1 kubectl=${K8S_VERSION}-1.1 cri-tools conntrack
+# Define required packages
+KUBE_PACKAGES="kubeadm=${K8S_VERSION}-1.1 kubelet=${K8S_VERSION}-1.1 kubectl=${K8S_VERSION}-1.1 cri-tools conntrack iptables iproute2 ethtool"
 
-# ✅ Fix permission errors by ignoring inaccessible files
-echo "Creating offline package archive: $TAR_FILE"
-sudo tar --exclude="*/partial/*" --ignore-failed-read -czf "$TAR_FILE" /var/cache/apt/archives || echo "Warning: No APT cache found for offline packages."
+# Download all packages and dependencies WITHOUT installing
+sudo apt-get download $KUBE_PACKAGES
+
+# Download dependencies for each package
+for pkg in $KUBE_PACKAGES; do
+    sudo apt-get download $(apt-cache depends --recurse --no-suggests --no-conflicts --no-replaces --no-breaks --no-enhances --no-pre-depends "$pkg" | grep "^\w" | sort -u)
+done
+
+# Move all downloaded `.deb` files to artifacts
+mv *.deb "$DEB_DIR"
+
+# ✅ Create offline package archive
+echo "📦 Creating offline package archive: $TAR_FILE"
+sudo tar --exclude="*/partial/*" --ignore-failed-read -czvf "$TAR_FILE" -C "$DEB_DIR" .
 
 # ✅ Generate install script
 echo "Generating installation script: $INSTALL_SCRIPT"
@@ -104,13 +88,11 @@ echo "🔧 Fixing permissions for .deb packages..."
 chmod -R u+rwX /test-env/artifacts  # Ensure read/write/execute permissions
 ls -lah /test-env/artifacts  # Verify ownership & permissions
 
-# 🚀 INSTALLING PACKAGES RECURSIVELY
-echo "📦 Installing all .deb packages from /test-env/artifacts/..."
+# ✅ Install all packages with dependencies
+echo "📦 Installing all .deb packages..."
 dpkg -R --install /test-env/artifacts/ || echo "⚠️ Warning: Some packages may have failed to install."
 
 echo "✅ All installations complete."
-
-
 EOF
 
 chmod +x "$INSTALL_SCRIPT"
@@ -126,4 +108,4 @@ echo "kubeadm: $K8S_VERSION" >> "$DEPENDENCIES_FILE"
 echo "kubelet: $K8S_VERSION" >> "$DEPENDENCIES_FILE"
 echo "kubectl: $K8S_VERSION" >> "$DEPENDENCIES_FILE"
 
-echo "Installation complete."
+echo "✅ Installation complete."
