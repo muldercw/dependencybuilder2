@@ -125,27 +125,44 @@ dpkg --configure -a || echo "⚠️ Warning: Some packages may still be unconfig
 echo "🔍 Verifying installed Kubernetes components..."
 dpkg -l | grep -E "kubeadm|kubelet|kubectl"
 
-echo "✅ All installations complete."
-# 🚀 **Start Kubernetes Services**
+# 🚀 **Attempt to Start Kubernetes Services Without systemctl**
 echo "🚀 Starting Kubernetes services..."
-systemctl daemon-reexec
-systemctl restart kubelet || echo "⚠️ Warning: kubelet failed to restart!"
-systemctl restart containerd || echo "⚠️ Warning: containerd failed to restart!"
 
-# ✅ **Check Service Status**
-echo "🔍 Checking Kubernetes service statuses..."
-systemctl status kubelet --no-pager || echo "⚠️ kubelet is not running!"
-systemctl status containerd --no-pager || echo "⚠️ containerd is not running!"
+# Check if `service` command is available
+if command -v service &> /dev/null; then
+    echo "🔹 Using 'service' to start kubelet and containerd..."
+    service kubelet restart || echo "⚠️ Warning: kubelet failed to restart!"
+    service containerd restart || echo "⚠️ Warning: containerd failed to restart!"
+else
+    echo "⚠️ 'service' command not available. Attempting direct process check..."
+fi
+
+# ✅ **Check if kubelet and container runtime are running**
+echo "🔍 Checking if kubelet and containerd are running..."
+
+if pgrep -x "kubelet" > /dev/null; then
+    echo "✅ kubelet is running."
+else
+    echo "❌ kubelet is NOT running!"
+fi
+
+if pgrep -x "containerd" > /dev/null; then
+    echo "✅ containerd is running."
+else
+    echo "❌ containerd is NOT running!"
+fi
 
 # ✅ **Detect Any Missing Dependencies**
 echo "🔎 Checking for missing dependencies..."
-MISSING_DEPS=$(journalctl -u kubelet --no-pager | grep -i "failed" | tail -n 10)
+MISSING_DEPS=$(journalctl -u kubelet --no-pager 2>/dev/null | grep -i "failed" | tail -n 10)
 if [[ -n "$MISSING_DEPS" ]]; then
     echo "❌ Missing dependencies detected:"
     echo "$MISSING_DEPS"
 else
     echo "✅ No missing dependencies detected."
 fi
+
+echo "✅ Kubernetes startup validation complete."
 EOF
 
 chmod +x "$INSTALL_SCRIPT"
