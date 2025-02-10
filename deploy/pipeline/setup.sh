@@ -38,20 +38,20 @@ fi
 
 # ✅ **Step 1: Add Kubernetes APT Repo**
 echo "🔗 Adding Kubernetes repository for $OS..."
-sudo apt-get update
-sudo apt-get install -y apt-transport-https ca-certificates curl gnupg
+apt-get update
+apt-get install -y apt-transport-https ca-certificates curl gnupg
 
-sudo mkdir -p -m 755 /etc/apt/keyrings
-curl -fsSL "https://pkgs.k8s.io/core:/stable:/v${K8S_MAJOR_MINOR}/deb/Release.key" | sudo gpg --dearmor --batch --yes -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
-sudo chmod 644 /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+mkdir -p -m 755 /etc/apt/keyrings
+curl -fsSL "https://pkgs.k8s.io/core:/stable:/v${K8S_MAJOR_MINOR}/deb/Release.key" | gpg --dearmor --batch --yes -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+chmod 644 /etc/apt/keyrings/kubernetes-apt-keyring.gpg
 
-echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v${K8S_MAJOR_MINOR}/deb/ /" | sudo tee /etc/apt/sources.list.d/kubernetes.list
-sudo chmod 644 /etc/apt/sources.list.d/kubernetes.list
-sudo apt-get update -y
+echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v${K8S_MAJOR_MINOR}/deb/ /" | tee /etc/apt/sources.list.d/kubernetes.list
+chmod 644 /etc/apt/sources.list.d/kubernetes.list
+apt-get update -y
 
 # ✅ **Step 2: Install Kubernetes (for version validation)**
 echo "📦 Installing Kubernetes version $K8S_VERSION..."
-sudo apt-get install -y --allow-downgrades --allow-change-held-packages kubeadm=${K8S_VERSION}-1.1 kubelet=${K8S_VERSION}-1.1 kubectl=${K8S_VERSION}-1.1 cri-tools conntrack iptables iproute2 ethtool
+apt-get install -y --allow-downgrades --allow-change-held-packages kubeadm=${K8S_VERSION}-1.1 kubelet=${K8S_VERSION}-1.1 kubectl=${K8S_VERSION}-1.1 cri-tools conntrack iptables iproute2 ethtool
 
 # ✅ **Step 3: Download Exact Package Versions (All Dependencies)**
 echo "📥 Fetching Kubernetes and dependencies for offline installation..."
@@ -61,25 +61,25 @@ KUBE_PACKAGES="kubeadm=${K8S_VERSION}-1.1 kubelet=${K8S_VERSION}-1.1 kubectl=${K
 
 # ✅ Fix permissions for apt downloads
 echo "🔧 Fixing permissions for APT downloads..."
-sudo chmod -R a+rwx /var/cache/apt/archives
-sudo chown -R _apt:root /var/cache/apt/archives
+chmod -R a+rwx /var/cache/apt/archives
+chown -R _apt:root /var/cache/apt/archives
 
 # **Download all packages (ignoring cache)**
 echo "📥 Downloading Kubernetes packages..."
-sudo apt-get download --allow-downgrades --allow-change-held-packages $KUBE_PACKAGES
+apt-get download --allow-downgrades --allow-change-held-packages $KUBE_PACKAGES
 
 # **Recursively fetch dependencies for each package**
 for pkg in $KUBE_PACKAGES; do
     echo "📥 Downloading dependencies for: $pkg"
     
     # Fix permissions before downloading
-    sudo chmod -R a+rwx /var/cache/apt/archives
-    sudo chown -R _apt:root /var/cache/apt/archives
+    chmod -R a+rwx /var/cache/apt/archives
+    chown -R _apt:root /var/cache/apt/archives
 
     # Download dependencies recursively
     DEPS=$(apt-cache depends --recurse --no-suggests --no-conflicts --no-replaces --no-breaks --no-enhances --no-pre-depends "$pkg" | grep "^\w" | sort -u)
     
-    sudo apt-get download --allow-downgrades --allow-change-held-packages $DEPS || echo "⚠️ Warning: Some dependencies could not be downloaded"
+    apt-get download --allow-downgrades --allow-change-held-packages $DEPS || echo "⚠️ Warning: Some dependencies could not be downloaded"
 done
 
 # ✅ Move all downloaded `.deb` files to artifacts
@@ -87,7 +87,7 @@ mv *.deb "$DEB_DIR"
 
 # ✅ **Step 4: Create offline package archive**
 echo "📦 Creating offline package archive: $TAR_FILE"
-sudo tar --exclude="*/partial/*" --ignore-failed-read -czvf "$TAR_FILE" -C "$DEB_DIR" .
+tar --exclude="*/partial/*" --ignore-failed-read -czvf "$TAR_FILE" -C "$DEB_DIR" .
 
 # ✅ **Step 5: Generate Install Script**
 echo "📝 Generating installation script: $INSTALL_SCRIPT"
