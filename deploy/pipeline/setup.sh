@@ -56,10 +56,18 @@ if [[ "$OS" == "ubuntu" || "$OS" == "debian" ]]; then
         apt-get download --allow-downgrades --allow-change-held-packages $DEPS || echo "⚠️ Warning: Some dependencies could not be downloaded"
     done
 
-elif [[ "$OS" == "centos" || "$OS" == "rocky" ]]; then
-    echo "🔗 Configuring Kubernetes repository for CentOS/Rocky..."
+elif [[ "$OS" == "rocky" ]]; then
+    echo "🔗 Configuring Kubernetes repository for Rocky..."
     dnf install -y dnf-plugins-core
-    dnf config-manager --add-repo "https://pkgs.k8s.io/core:/stable:/v${K8S_MAJOR_MINOR}/rpm/"
+    cat <<EOF > /etc/yum.repos.d/kubernetes.repo
+[kubernetes]
+name=Kubernetes Repository
+baseurl=https://pkgs.k8s.io/core:/stable:/v${K8S_MAJOR_MINOR}/rpm/
+enabled=1
+gpgcheck=0
+EOF
+    echo "🔄 Refreshing DNF metadata..."
+    dnf makecache --refresh
 
     PKGS="kubeadm-${K8S_VERSION} kubelet-${K8S_VERSION} kubectl-${K8S_VERSION} cri-tools conntrack iptables iproute ethtool"
 
@@ -83,26 +91,12 @@ EOF
     echo "📥 Downloading Kubernetes packages..."
     dnf download --resolve $PKGS
 
-elif [[ "$OS" == "arch" ]]; then
-    echo "🔗 Configuring Arch Linux repository..."
-    pacman-key --init
-    pacman-key --populate archlinux
-    pacman -Sy --noconfirm archlinux-keyring
-
-    PKGS="kubeadm kubelet kubectl conntrack-tools iptables iproute2 ethtool"
-
-    echo "📥 Downloading Kubernetes packages..."
-    for pkg in $PKGS; do
-        if pacman -Ss "^$pkg\$" &>/dev/null; then
-            pacman -Sw --noconfirm --cachedir="$PKG_DIR" $pkg
-        else
-            echo "⚠️ Warning: Package '$pkg' not found in Arch Linux repositories. Skipping..."
-        fi
-    done
-
 elif [[ "$OS" == "opensuse" ]]; then
     echo "🔗 Configuring Kubernetes repository for OpenSUSE..."
+    zypper ar -f "https://pkgs.k8s.io/core:/stable:/v${K8S_MAJOR_MINOR}/rpm/" Kubernetes
     zypper --gpg-auto-import-keys refresh
+
+    echo "📥 Downloading Kubernetes packages..."
     zypper --non-interactive install --download-only kubeadm kubelet kubectl cri-tools conntrack iptables iproute2 ethtool
 fi
 
