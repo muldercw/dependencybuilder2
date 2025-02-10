@@ -127,7 +127,18 @@ set -e  # Stop on first error
 echo "🚀 Installing only available packages from /test-env/artifacts/"
 PKG_DIR="/test-env/artifacts/"
 
-# ✅ **Step 1: Detect OS Properly**
+# ✅ **Step 1: Debug OS Detection**
+echo "🔍 Checking OS information..."
+
+# Print /etc/os-release if it exists
+if [[ -f "/etc/os-release" ]]; then
+    echo "ℹ️ Contents of /etc/os-release:"
+    cat /etc/os-release
+else
+    echo "⚠️ Warning: /etc/os-release not found!"
+fi
+
+# ✅ **Step 2: Detect OS**
 if [[ -f "/etc/os-release" ]]; then
     source /etc/os-release
     OS_ID="$ID"
@@ -151,7 +162,7 @@ fi
 
 echo "🔍 Detected OS: $OS_ID"
 
-# ✅ **Step 2: Determine Package Manager**
+# ✅ **Step 3: Determine Package Manager**
 if [[ "$OS_ID" == "ubuntu" || "$OS_ID" == "debian" ]]; then
     PKG_MANAGER="dpkg"
 elif [[ "$OS_ID" == "rhel" || "$OS_ID" == "rocky" || "$OS_ID" == "centos" ]]; then
@@ -169,7 +180,7 @@ fi
 
 echo "📂 Installing Kubernetes using: $PKG_MANAGER"
 
-# ✅ **Step 3: Install Kubernetes Components**
+# ✅ **Step 4: Install Kubernetes Components**
 if [[ "$PKG_MANAGER" == "dpkg" ]]; then
     echo "📦 Installing .deb packages..."
     find "$PKG_DIR" -type f -name "*.deb" -exec dpkg -i {} + || echo "⚠️ Warning Some packages may have failed to install."
