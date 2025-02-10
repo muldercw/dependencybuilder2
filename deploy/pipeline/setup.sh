@@ -126,6 +126,26 @@ echo "🔍 Verifying installed Kubernetes components..."
 dpkg -l | grep -E "kubeadm|kubelet|kubectl"
 
 echo "✅ All installations complete."
+# 🚀 **Start Kubernetes Services**
+echo "🚀 Starting Kubernetes services..."
+systemctl daemon-reexec
+systemctl restart kubelet || echo "⚠️ Warning: kubelet failed to restart!"
+systemctl restart containerd || echo "⚠️ Warning: containerd failed to restart!"
+
+# ✅ **Check Service Status**
+echo "🔍 Checking Kubernetes service statuses..."
+systemctl status kubelet --no-pager || echo "⚠️ kubelet is not running!"
+systemctl status containerd --no-pager || echo "⚠️ containerd is not running!"
+
+# ✅ **Detect Any Missing Dependencies**
+echo "🔎 Checking for missing dependencies..."
+MISSING_DEPS=$(journalctl -u kubelet --no-pager | grep -i "failed" | tail -n 10)
+if [[ -n "$MISSING_DEPS" ]]; then
+    echo "❌ Missing dependencies detected:"
+    echo "$MISSING_DEPS"
+else
+    echo "✅ No missing dependencies detected."
+fi
 EOF
 
 chmod +x "$INSTALL_SCRIPT"
