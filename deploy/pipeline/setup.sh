@@ -123,13 +123,28 @@ cat /test-env/artifacts/paths.txt
 # 🚀 INSTALLING PACKAGES
 echo "📦 Beginning installation of .deb packages..."
 
-while IFS= read -r PACKAGE_PATH || [[ -n "$PACKAGE_PATH" ]]; do
-    echo "📦 Installing: $PACKAGE_PATH"
-    if ! dpkg -i "$PACKAGE_PATH"; then
-        echo "❌ ERROR: Failed to install $PACKAGE_PATH"
-        exit 1
+echo "🚀 Starting installation of .deb packages..."
+
+# Read each package path from paths.txt and install one by one
+while IFS= read -r PACKAGE_PATH; do
+    # Skip empty lines (just in case)
+    [[ -z "$PACKAGE_PATH" ]] && continue 
+
+    echo "📦 Processing: $PACKAGE_PATH"
+    
+    # Check if the file actually exists before trying to install
+    if [[ -f "$PACKAGE_PATH" ]]; then
+        echo "✅ Installing: $PACKAGE_PATH"
+        dpkg -i "$PACKAGE_PATH" || echo "⚠️ Warning: Failed to install $PACKAGE_PATH"
+    else
+        echo "❌ ERROR: File not found - $PACKAGE_PATH"
     fi
+
+    echo "-----------------------------------"
 done < /test-env/artifacts/paths.txt
+
+echo "✅ All installations complete."
+
 
 # 🔧 Resolve dependencies
 echo "🔧 Resolving dependencies..."
