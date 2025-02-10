@@ -50,28 +50,32 @@ echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.
 sudo chmod 644 /etc/apt/sources.list.d/kubernetes.list
 sudo apt-get update -y
 
-# 🔽 **Download Required Packages & Dependencies**
+# 🚀 **Step 1: Install Kubernetes First**
+echo "📦 Installing Kubernetes version $K8S_VERSION..."
+sudo apt-get install -y --allow-downgrades --allow-change-held-packages kubeadm=${K8S_VERSION}-1.1 kubelet=${K8S_VERSION}-1.1 kubectl=${K8S_VERSION}-1.1 cri-tools conntrack iptables iproute2 ethtool
+
+# 🚀 **Step 2: Download Exact Package Versions**
 echo "📦 Downloading Kubernetes and dependencies for offline installation..."
 
 # Define required packages
 KUBE_PACKAGES="kubeadm=${K8S_VERSION}-1.1 kubelet=${K8S_VERSION}-1.1 kubectl=${K8S_VERSION}-1.1 cri-tools conntrack iptables iproute2 ethtool"
 
-# Download all packages and dependencies WITHOUT installing
-sudo apt-get download $KUBE_PACKAGES
+# **Download all packages and dependencies**
+sudo apt-get download --allow-downgrades --allow-change-held-packages $KUBE_PACKAGES
 
-# Download dependencies for each package
+# **Download dependencies for each package**
 for pkg in $KUBE_PACKAGES; do
-    sudo apt-get download $(apt-cache depends --recurse --no-suggests --no-conflicts --no-replaces --no-breaks --no-enhances --no-pre-depends "$pkg" | grep "^\w" | sort -u)
+    sudo apt-get download --allow-downgrades --allow-change-held-packages $(apt-cache depends --recurse --no-suggests --no-conflicts --no-replaces --no-breaks --no-enhances --no-pre-depends "$pkg" | grep "^\w" | sort -u)
 done
 
 # Move all downloaded `.deb` files to artifacts
 mv *.deb "$DEB_DIR"
 
-# ✅ Create offline package archive
+# ✅ **Create offline package archive**
 echo "📦 Creating offline package archive: $TAR_FILE"
 sudo tar --exclude="*/partial/*" --ignore-failed-read -czvf "$TAR_FILE" -C "$DEB_DIR" .
 
-# ✅ Generate install script
+# ✅ **Generate install script**
 echo "Generating installation script: $INSTALL_SCRIPT"
 cat <<EOF > "$INSTALL_SCRIPT"
 #!/bin/bash
@@ -88,7 +92,7 @@ echo "🔧 Fixing permissions for .deb packages..."
 chmod -R u+rwX /test-env/artifacts  # Ensure read/write/execute permissions
 ls -lah /test-env/artifacts  # Verify ownership & permissions
 
-# ✅ Install all packages with dependencies
+# ✅ Install all packages with dependencies, allowing downgrades
 echo "📦 Installing all .deb packages..."
 dpkg -R --install /test-env/artifacts/ || echo "⚠️ Warning: Some packages may have failed to install."
 
@@ -97,11 +101,11 @@ EOF
 
 chmod +x "$INSTALL_SCRIPT"
 
-# ✅ Generate SHA256 checksum
+# ✅ **Generate SHA256 checksum**
 echo "Generating SHA256 checksum file: $CHECKSUM_FILE"
 sha256sum "$TAR_FILE" "$INSTALL_SCRIPT" > "$CHECKSUM_FILE"
 
-# ✅ Generate dependencies.yaml
+# ✅ **Generate dependencies.yaml**
 echo "Generating dependencies.yaml..."
 echo "# Kubernetes Dependencies for $OS (K8S v$K8S_VERSION)" > "$DEPENDENCIES_FILE"
 echo "kubeadm: $K8S_VERSION" >> "$DEPENDENCIES_FILE"
