@@ -220,7 +220,6 @@ esac
 
 echo "✅ Kubernetes installation complete."
 
-
 EOF
 
 chmod +x "$INSTALL_SCRIPT"
