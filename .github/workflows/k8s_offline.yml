@@ -16,16 +16,6 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Check if kubeversion.yaml Exists
-        run: |
-          if [[ ! -f deploy/pipeline/kubeversion.yaml ]]; then
-            echo "Error: kubeversion.yaml is missing!"
-            exit 1
-          fi
-
-      - name: Debug kubeversion.yaml
-        run: cat deploy/pipeline/kubeversion.yaml
-
       - name: Read Kubernetes Version from YAML
         id: read_version
         run: |
@@ -37,110 +27,73 @@ jobs:
           echo "kube_version=$KUBE_VERSION" >> "$GITHUB_ENV"
           echo "kube_version=$KUBE_VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Debug K8S Version
-        run: |
-          echo "Extracted KUBE_VERSION: $KUBE_VERSION"
-          echo "Stored in GITHUB_ENV: ${{ env.kube_version }}"
-
   build:
     name: "Build Offline Installer for ${{ matrix.os }}"
     runs-on: ubuntu-latest
     needs: read-kube-version
-    continue-on-error: true  # ✅ Allows other OS builds to continue if one fails
     env:
       K8S_VERSION: ${{ needs.read-kube-version.outputs.kube_version }}
     strategy:
       matrix:
-        os: [ubuntu] #, debian, almalinux, centos, rocky, fedora, arch, opensuse]
+        os: [ubuntu]  # You can add debian, centos, etc.
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Debug K8S Version
+      - name: Start Build Container
         run: |
-          echo "Using Kubernetes Version: $K8S_VERSION"
+          case "${{ matrix.os }}" in
+            ubuntu) IMAGE="ubuntu:20.04" ;;
+            debian) IMAGE="debian:latest" ;;
+            centos) IMAGE="centos:8" ;;
+            rocky) IMAGE="rockylinux:8" ;;
+            fedora) IMAGE="fedora:latest" ;;
+            arch) IMAGE="archlinux:latest" ;;
+            opensuse) IMAGE="opensuse/leap:latest" ;;
+            *) echo "Unsupported OS: ${{ matrix.os }}"; exit 1 ;;
+          esac
+          echo "Starting build container for ${{ matrix.os }}..."
+          docker run --rm -d --name build-container -v $PWD/artifacts:/test-env/artifacts $IMAGE tail -f /dev/null
 
       - name: Run Kubernetes Dependency & Package Indexer
-        run: bash deploy/pipeline/setup.sh ${{ matrix.os }} $K8S_VERSION
-        continue-on-error: true  # ✅ Ensures failure in one OS does not stop others
+        run: docker exec build-container bash -c "bash deploy/pipeline/setup.sh ${{ matrix.os }} $K8S_VERSION"
 
-      - name: Upload Dependencies YAML
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: dependencies-${{ matrix.os }}
-          path: artifacts/dependencies.yaml
+      - name: Extract Built Artifacts from Container
+        run: docker cp build-container:/test-env/artifacts ./artifacts
+
+      - name: Stop Build Container
+        run: docker stop build-container
 
       - name: Upload Offline Package Archive
-        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: offline-packages-${{ matrix.os }}
           path: artifacts/offline_packages_${{ matrix.os }}_${{ env.K8S_VERSION }}.tar.gz
-      
-      - name: Upload Offline Installation Script
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: install-script-${{ matrix.os }}
-          path: artifacts/install_${{ matrix.os }}_${{ env.K8S_VERSION }}.sh
-      
-      - name: Upload Checksums
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: checksums-${{ matrix.os }}
-          path: artifacts/checksums_${{ matrix.os }}_${{ env.K8S_VERSION }}.sha256
-
 
   test_install:
     name: "Test Air-Gapped Installation for ${{ matrix.os }}"
     runs-on: ubuntu-latest
     needs: [read-kube-version, build]
-    continue-on-error: true
     env:
       K8S_VERSION: ${{ needs.read-kube-version.outputs.kube_version }}
     strategy:
       matrix:
-        os: [ubuntu, debian, almalinux, centos, rocky, fedora, arch, opensuse]
+        os: [ubuntu]  # You can add debian, centos, etc.
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-  
-      - name: Ensure Artifacts Directory Exists
-        run: mkdir -p artifacts/
-  
-      - name: Download and Extract Offline Package Archive
+
+      - name: Download Offline Package Archive
         uses: actions/download-artifact@v4
         with:
           name: offline-packages-${{ matrix.os }}
           path: artifacts/
-  
-      - name: Download and Extract Offline Installation Script
-        uses: actions/download-artifact@v4
-        with:
-          name: install-script-${{ matrix.os }}
-          path: artifacts/
-  
-      - name: Download and Extract Checksums
-        uses: actions/download-artifact@v4
-        with:
-          name: checksums-${{ matrix.os }}
-          path: artifacts/
-  
-      - name: Set Executable Permissions After Download
-        run: chmod +x artifacts/install_${{ matrix.os }}_${{ env.K8S_VERSION }}.sh
-  
-      - name: Debug List Local Artifacts Directory Before Running Container
-        run: ls -lah artifacts/ || echo "Warning artifacts/ directory is empty!"
-  
-      - name: Start Test Container
-        if: success()
+
+      - name: Start Test Container (No Internet)
         run: |
           case "${{ matrix.os }}" in
             ubuntu) IMAGE="ubuntu:20.04" ;;
             debian) IMAGE="debian:latest" ;;
-            almalinux) IMAGE="almalinux:8" ;;
             centos) IMAGE="centos:8" ;;
             rocky) IMAGE="rockylinux:8" ;;
             fedora) IMAGE="fedora:latest" ;;
@@ -149,14 +102,13 @@ jobs:
             *) echo "Unsupported OS: ${{ matrix.os }}"; exit 1 ;;
           esac
           echo "Starting test container for ${{ matrix.os }}..."
-          docker run --rm -d --name test-container -v $PWD/artifacts:/test-env/artifacts $IMAGE tail -f /dev/null
-  
+          docker run --rm -d --name test-container --network none -v $PWD/artifacts:/test-env/artifacts $IMAGE tail -f /dev/null
+
       - name: Extract Offline Packages Inside Test Container
         run: docker exec test-container bash -c "tar -xvf /test-env/artifacts/offline_packages_${{ matrix.os }}_${{ env.K8S_VERSION }}.tar.gz -C /test-env/artifacts/ || echo 'No extraction needed'"
-  
-      - name: Debug List Extracted Offline Packages Inside Test Container
-        run: docker exec test-container bash -c "ls -lah /test-env/artifacts/ || echo 'Warning No extracted packages found!'"
-  
+
       - name: Run Offline Installation Inside Test Container
-        if: success()
         run: docker exec test-container bash -c "chmod +x /test-env/artifacts/install_${{ matrix.os }}_${{ env.K8S_VERSION }}.sh && /test-env/artifacts/install_${{ matrix.os }}_${{ env.K8S_VERSION }}.sh"
+
+      - name: Stop Test Container
+        run: docker stop test-container
