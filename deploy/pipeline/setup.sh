@@ -93,66 +93,28 @@ cat <<EOF > "$INSTALL_SCRIPT"
 #!/bin/bash
 set -e
 
-echo "🚀 Installing offline Kubernetes for ubuntu (v${K8S_VERSION})"
+echo "🚀 Debugging: Searching for all .deb files"
 
-# Detect if running inside a container
-if [ -f /.dockerenv ]; then
-    echo "📦 Detected container environment. Running without sudo..."
-    SUDO=""
-else
-    SUDO="sudo"
-fi
-
-# 🗂 Print full directory structure for debugging
-echo "📂 Listing all files in /test-env/artifacts/ before installation:"
+# 📂 Print full directory structure for debugging
+echo "📂 Listing all files recursively from /test-env/artifacts/:"
 find /test-env/artifacts/ -type f
 
-# **Manually Set Package Directory**
-DEB_SOURCE_DIR="/test-env/artifacts/var/cache/apt/archives"
-DEB_TARGET_DIR="/test-env/packages"
+# 🔍 Find all `.deb` files and print them
+echo "🔎 Searching for all .deb files..."
+mapfile -t DEB_FILES < <(find /test-env/artifacts/ -type f -name "*.deb" 2>/dev/null)
 
-# **Ensure Package Directory Exists**
-if [[ ! -d "$DEB_SOURCE_DIR" ]]; then
-    echo "❌ ERROR: Expected package directory $DEB_SOURCE_DIR does not exist!"
-    echo "🔍 Scanning for possible package directories..."
-    find /test-env/artifacts/ -type d
-    exit 1
-else
-    echo "✅ Using package directory: $DEB_SOURCE_DIR"
-fi
-
-# **Move `.deb` Files to More Accessible Location**
-echo "🚚 Moving .deb files to $DEB_TARGET_DIR..."
-mkdir -p "$DEB_TARGET_DIR"
-mv "$DEB_SOURCE_DIR"/*.deb "$DEB_TARGET_DIR"/ || echo "⚠️ Warning: No .deb files found to move!"
-
-# **Find All `.deb` Files Again (Now in /test-env/packages)**
-mapfile -t DEB_FILES < <(find "$DEB_TARGET_DIR" -maxdepth 1 -type f -name "*.deb" 2>/dev/null)
-
-# **Exit if No `.deb` Files Are Found**
+# 📦 If no files found, print error and exit
 if [[ ${#DEB_FILES[@]} -eq 0 ]]; then
-    echo "⚠️ ERROR: No .deb packages found in '$DEB_TARGET_DIR'!"
-    ls -lah "$DEB_TARGET_DIR" || echo "❌ ERROR: Could not list directory contents!"
+    echo "❌ ERROR: No .deb packages found!"
     exit 1
 fi
 
-# 📦 **Print Found .deb Files**
+# ✅ Print all found `.deb` files
 echo "📝 Found the following .deb files:"
 for FILE in "${DEB_FILES[@]}"; do
     echo "  - $FILE"
 done
 
-# 🚀 **Install Each `.deb` Package**
-for FILE in "${DEB_FILES[@]}"; do
-    echo "📦 Installing: $FILE"
-    $SUDO dpkg -i "$FILE" || true  # Continue even if dependencies are missing
-done
-
-# 🔧 **Fix Any Missing Dependencies**
-echo "🔧 Resolving dependencies..."
-$SUDO apt-get install -f -y
-
-echo "✅ Installation complete!"
 
 EOF
 
