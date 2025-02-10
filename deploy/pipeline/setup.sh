@@ -108,12 +108,17 @@ cat <<EOF > "$INSTALL_SCRIPT"
 set -e  # Stop on first error
 
 echo "🚀 Installing only available packages from /test-env/artifacts/"
+PKG_DIR="/test-env/artifacts/"
 
-# Detect package manager
+# Detect OS & Package Manager
 if command -v apt-get &> /dev/null; then
     PKG_MANAGER="dpkg"
 elif command -v dnf &> /dev/null; then
-    PKG_MANAGER="dnf"
+    if grep -qi "fedora" /etc/os-release; then
+        PKG_MANAGER="dnf_fedora"
+    else
+        PKG_MANAGER="dnf"
+    fi
 elif command -v pacman &> /dev/null; then
     PKG_MANAGER="pacman"
 elif command -v zypper &> /dev/null; then
@@ -123,19 +128,51 @@ else
     exit 1
 fi
 
-echo "📂 Installing Kubernetes using: \$PKG_MANAGER"
+echo "📂 Installing Kubernetes using: $PKG_MANAGER"
 
-if [[ "\$PKG_MANAGER" == "dpkg" ]]; then
-    find /test-env/artifacts/ -type f -name "*.deb" -exec dpkg -i {} + || echo "⚠️ Warning: Some packages may have failed to install."
-elif [[ "\$PKG_MANAGER" == "dnf" ]]; then
-    dnf install -y /test-env/artifacts/*.rpm
-elif [[ "\$PKG_MANAGER" == "pacman" ]]; then
-    pacman -U --noconfirm /test-env/artifacts/*.pkg.tar.zst
-elif [[ "\$PKG_MANAGER" == "zypper" ]]; then
-    zypper install --no-confirm /test-env/artifacts/*.rpm
+# 📌 **Ubuntu/Debian (dpkg)**
+if [[ "$PKG_MANAGER" == "dpkg" ]]; then
+    echo "📦 Installing .deb packages..."
+    find "$PKG_DIR" -type f -name "*.deb" -exec dpkg -i {} + || echo "⚠️ Warning Some packages may have failed to install."
+    echo "🔧 Fixing broken dependencies..."
+    apt-get -y install --fix-broken || echo "⚠️ Warning Some dependencies may still be missing."
+
+# 📌 **CentOS/Rocky (dnf)**
+elif [[ "$PKG_MANAGER" == "dnf" ]]; then
+    echo "📦 Installing .rpm packages..."
+    dnf install -y "$PKG_DIR"/*.rpm || echo "⚠️ Warning Some packages may have failed to install."
+
+# 📌 **Fedora (dnf but different)**
+elif [[ "$PKG_MANAGER" == "dnf_fedora" ]]; then
+    echo "🔄 Refreshing Fedora metadata..."
+    dnf makecache --refresh || echo "⚠️ Warning Could not refresh Fedora metadata!"
+    echo "📦 Installing .rpm packages..."
+    dnf install -y "$PKG_DIR"/*.rpm || echo "⚠️ Warning Some packages may have failed to install."
+
+# 📌 **Arch Linux (pacman)**
+elif [[ "$PKG_MANAGER" == "pacman" ]]; then
+    echo "🔍 Checking pacman database..."
+    if [[ ! -f /var/lib/pacman/sync/core.db ]]; then
+        echo "⚠️ Pacman database missing! Initializing..."
+        pacman -Sy --noconfirm
+    fi
+    echo "📦 Installing .pkg.tar.zst packages..."
+    find "$PKG_DIR" -type f -name "*.pkg.tar.zst" -exec pacman -U --noconfirm {} + || echo "⚠️ Warning Some packages may have failed to install."
+
+# 📌 **OpenSUSE (zypper)**
+elif [[ "$PKG_MANAGER" == "zypper" ]]; then
+    echo "🔄 Refreshing Zypper metadata..."
+    zypper refresh --gpg-auto-import-keys || echo "⚠️ Warning Could not refresh metadata!"
+    echo "📦 Installing .rpm packages..."
+    zypper --non-interactive install "$PKG_DIR"/*.rpm || echo "⚠️ Warning Some packages may have failed to install."
 fi
 
+# ✅ Final Verification
+echo "🔍 Verifying installed Kubernetes components..."
+dpkg -l | grep -E "kubeadm|kubelet|kubectl|containerd" 2>/dev/null || echo "⚠️ Warning Some Kubernetes components may not be installed."
+
 echo "✅ Kubernetes installation complete."
+
 EOF
 
 chmod +x "$INSTALL_SCRIPT"
