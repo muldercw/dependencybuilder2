@@ -87,10 +87,16 @@ elif [[ "$PKG_MANAGER" == "pacman" ]]; then
     pacman-key --populate archlinux
     pacman -Sy --noconfirm archlinux-keyring
 
-    PKGS="kubeadm kubelet kubectl cri-tools conntrack-tools iptables iproute2 ethtool"
+    PKGS="kubeadm kubelet kubectl conntrack-tools iptables iproute2 ethtool"
 
-    echo "📥 Downloading Kubernetes packages and dependencies..."
-    pacman -Sw --noconfirm --cachedir="$PKG_DIR" $PKGS
+    echo "📥 Downloading Kubernetes packages..."
+    for pkg in $PKGS; do
+        if pacman -Ss "^$pkg\$" &>/dev/null; then
+            pacman -Sw --noconfirm --cachedir="$PKG_DIR" $pkg
+        else
+            echo "⚠️ Warning: Package '$pkg' not found in Arch Linux repositories. Skipping..."
+        fi
+    done
 
 elif [[ "$PKG_MANAGER" == "zypper" ]]; then
     echo "🔗 Enabling Kubernetes repository for OpenSUSE..."
@@ -144,13 +150,5 @@ echo "✅ Kubernetes installation complete."
 EOF
 
 chmod +x "$INSTALL_SCRIPT"
-
-# ✅ **Step 5: Generate Checksum**
-echo "🔍 Generating SHA256 checksum file: $CHECKSUM_FILE"
-sha256sum "$TAR_FILE" "$INSTALL_SCRIPT" > "$CHECKSUM_FILE"
-
-# ✅ **Step 6: Generate dependencies.yaml**
-echo "📜 Generating dependencies.yaml..."
-echo "# Kubernetes Dependencies for $OS (K8S v$K8S_VERSION)" > "$DEPENDENCIES_FILE"
 
 echo "✅ Kubernetes Offline Build Complete."
