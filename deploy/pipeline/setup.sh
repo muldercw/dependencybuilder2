@@ -99,6 +99,10 @@ echo "🚀 Debugging: Searching for all .deb files"
 echo "📂 Listing all files recursively from /test-env/artifacts/:"
 find /test-env/artifacts/ -type f -print
 
+echo "🔧 Fixing permissions for .deb packages..."
+chmod -R u+rwX /test-env/artifacts  # Give user read/write/execute permissions
+ls -lah /test-env/artifacts # Verify ownership & permissions
+
 # 🔎 Use 'find' and directly write to paths.txt (avoids variable issues)
 echo "🔍 Searching for .deb files..."
 find /test-env/artifacts/ -type f -name "*.deb" -print > /test-env/artifacts/paths.txt 2>/dev/null
