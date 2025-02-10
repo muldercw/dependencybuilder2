@@ -63,7 +63,8 @@ elif [[ "$OS" == "rocky" ]]; then
 
 
     echo "🔄 Refreshing DNF metadata..."
-    dnf makecache --refresh
+    dnf clean all && dnf makecache --refresh
+
 
 
     PKGS="kubeadm kubelet kubectl cri-tools conntrack-tools iptables iproute. ethtool"
