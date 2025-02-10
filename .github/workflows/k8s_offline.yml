@@ -53,10 +53,10 @@ jobs:
             *) echo "Unsupported OS: ${{ matrix.os }}"; exit 1 ;;
           esac
           echo "Starting build container for ${{ matrix.os }}..."
-          docker run --rm -d --name build-container -v $PWD/artifacts:/test-env/artifacts $IMAGE tail -f /dev/null
-
+          docker run --rm -d --name build-container -v $PWD:/repo -w /repo $IMAGE tail -f /dev/null
+      
       - name: Run Kubernetes Dependency & Package Indexer
-        run: docker exec build-container bash -c "bash deploy/pipeline/setup.sh ${{ matrix.os }} $K8S_VERSION"
+        run: docker exec build-container bash -c "bash /repo/deploy/pipeline/setup.sh ${{ matrix.os }} $K8S_VERSION"
 
       - name: Extract Built Artifacts from Container
         run: docker cp build-container:/test-env/artifacts ./artifacts
