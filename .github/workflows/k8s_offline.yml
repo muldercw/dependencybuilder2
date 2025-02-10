@@ -7,8 +7,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  read-kube-version:
-    name: "Read Kubernetes Version"
+  read-configs:
+    name: "Read Configuration Files"
     runs-on: ubuntu-latest
     outputs:
       kube_version: ${{ steps.read_version.outputs.kube_version }}
@@ -31,17 +31,17 @@ jobs:
     name: "Build Offline Installer for ${{ matrix.os }}"
     runs-on: ubuntu-latest
     continue-on-error: true
-    needs: read-kube-version
+    needs: read-configs
     env:
-      K8S_VERSION: ${{ needs.read-kube-version.outputs.kube_version }}
+      K8S_VERSION: ${{ needs.read-configs.outputs.kube_version }}
     strategy:
       matrix:
-        os: [ubuntu,debian,centos,rocky,fedora,arch,opensuse]
+        os: [ubuntu,debian,centos,arch] #rocky,fedora,opensuse
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Start Build Container
+      - name: Start Build Container   ### Need to move this to a configuration file so we can build based on OS releases as well.
         run: |
           case "${{ matrix.os }}" in
             ubuntu) IMAGE="ubuntu:20.04" ;;
@@ -81,12 +81,12 @@ jobs:
     name: "Test Air-Gapped Installation for ${{ matrix.os }}"
     runs-on: ubuntu-latest
     continue-on-error: true
-    needs: [read-kube-version, build]
+    needs: [read-configs, build]
     env:
-      K8S_VERSION: ${{ needs.read-kube-version.outputs.kube_version }}
+      K8S_VERSION: ${{ needs.read-configs.outputs.kube_version }}
     strategy:
       matrix:
-        os: [ubuntu,debian,centos,rocky,fedora,arch,opensuse]
+        os: [ubuntu,debian,centos,arch] #rocky,fedora,opensuse
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -103,7 +103,7 @@ jobs:
           name: install_script_${{ matrix.os }}_${{ env.K8S_VERSION }}
           path: artifacts/
 
-      - name: Start Test Container (No Internet)
+      - name: Start Test Container (No Internet)  ### Need to move this to a configuration file so we can build based on OS releases as well.
         run: |
           case "${{ matrix.os }}" in
             ubuntu) IMAGE="ubuntu:20.04" ;;
