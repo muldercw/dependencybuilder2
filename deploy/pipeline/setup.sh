@@ -93,15 +93,7 @@ cat <<EOF > "$INSTALL_SCRIPT"
 #!/bin/bash
 set -e  # Stop on first error
 
-echo "🚀 Debugging: Searching for all .deb files"
-
-# 📂 Print directory tree for debugging
-echo "📂 Listing all files recursively from /test-env/artifacts/:"
-find /test-env/artifacts/ -type f -print
-
-# 🔎 Use 'find' and directly write to paths.txt (avoids variable issues)
-echo "🔍 Searching for .deb files..."
-find /test-env/artifacts/ -type f -name "*.deb" -print > /test-env/artifacts/paths.txt 2>/dev/null
+echo "🚀 Installing offline Kubernetes for ubuntu (v${K8S_VERSION})"
 
 # 📂 Print paths.txt content to verify it was correctly written
 echo "📝 Verifying paths.txt contents..."
@@ -113,8 +105,20 @@ if [[ ! -s /test-env/artifacts/paths.txt ]]; then
     exit 1
 fi
 
-echo "✅ Successfully saved .deb file paths:"
-cat /test-env/artifacts/paths.txt
+echo "📦 Beginning installation of .deb packages..."
+
+# 🚀 Read each line from paths.txt and install the package
+while IFS= read -r PACKAGE_PATH; do
+    echo "📦 Installing: $PACKAGE_PATH"
+    dpkg -i "$PACKAGE_PATH" || echo "⚠️ Warning: Failed to install $PACKAGE_PATH"
+done < /test-env/artifacts/paths.txt
+
+# 🔧 Resolve dependencies
+echo "🔧 Resolving dependencies..."
+apt-get install -f -y
+
+echo "✅ Installation complete!"
+
 
 EOF
 
