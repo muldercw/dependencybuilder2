@@ -57,32 +57,26 @@ if [[ "$OS" == "ubuntu" || "$OS" == "debian" ]]; then
     done
 
 elif [[ "$OS" == "rocky" ]]; then
-    echo "🔗 Configuring Kubernetes repository for Rocky..."
+    echo "🔗 Configuring Kubernetes repository for Rocky Linux..."
     dnf install -y dnf-plugins-core
-    cat <<EOF > /etc/yum.repos.d/kubernetes.repo
-[kubernetes]
-name=Kubernetes Repository
-baseurl=https://pkgs.k8s.io/core:/stable:/v${K8S_MAJOR_MINOR}/rpm/
-enabled=1
-gpgcheck=0
-EOF
+    echo -e "[kubernetes]\nname=Kubernetes Repository\nbaseurl=https://pkgs.k8s.io/core:/stable:/v${K8S_MAJOR_MINOR}/rpm/\nenabled=1\ngpgcheck=0" | tee /etc/yum.repos.d/kubernetes.repo > /dev/null
+
+
     echo "🔄 Refreshing DNF metadata..."
     dnf makecache --refresh
 
-    PKGS="kubeadm-${K8S_VERSION} kubelet-${K8S_VERSION} kubectl-${K8S_VERSION} cri-tools conntrack iptables iproute ethtool"
+    # ✅ Force DNF to only resolve x86_64 architecture packages
+    ARCH="x86_64"
+    PKGS="kubeadm-${K8S_VERSION}.${ARCH} kubelet-${K8S_VERSION}.${ARCH} kubectl-${K8S_VERSION}.${ARCH} cri-tools.${ARCH} conntrack-tools.${ARCH} iptables.${ARCH} iproute.${ARCH} ethtool.${ARCH}"
 
-    echo "📥 Downloading Kubernetes packages..."
-    dnf download --resolve $PKGS
+    echo "📥 Downloading Kubernetes packages for architecture: $ARCH..."
+    dnf download --resolve --arch=${ARCH} $PKGS
+
 
 elif [[ "$OS" == "fedora" ]]; then
     echo "🔗 Configuring Kubernetes repository for Fedora..."
-    cat <<EOF > /etc/yum.repos.d/kubernetes.repo
-[kubernetes]
-name=Kubernetes Repository
-baseurl=https://pkgs.k8s.io/core:/stable:/v${K8S_MAJOR_MINOR}/rpm/
-enabled=1
-gpgcheck=0
-EOF
+    echo -e "[kubernetes]\nname=Kubernetes Repository\nbaseurl=https://pkgs.k8s.io/core:/stable:/v${K8S_MAJOR_MINOR}/rpm/\nenabled=1\ngpgcheck=0" | tee /etc/yum.repos.d/kubernetes.repo > /dev/null
+
     echo "🔄 Refreshing DNF metadata..."
     dnf makecache --refresh
 
