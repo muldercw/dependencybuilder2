@@ -114,6 +114,8 @@ DEB_DIR="/test-env/artifacts/var/cache/apt/archives"
 if [[ ! -d "$DEB_DIR" ]]; then
     echo "❌ ERROR: Package directory '$DEB_DIR' does not exist!"
     exit 1
+else
+    echo "✅ Using package directory: $DEB_DIR"
 fi
 
 # **Find All `.deb` Files**
@@ -143,6 +145,7 @@ echo "🔧 Resolving dependencies..."
 $SUDO apt-get install -f -y
 
 echo "✅ Installation complete!"
+
 
 EOF
 
