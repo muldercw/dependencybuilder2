@@ -134,13 +134,13 @@ fi
 echo "📝 Verifying paths.txt contents before reading..."
 cat -A /test-env/artifacts/paths.txt  # Shows hidden characters like ^M (Windows newlines)
 
-# Convert to Unix format (fixes Windows-style CRLF issues)
+# 🚨 Ensure paths.txt has correct line endings (Fix Windows CRLF issue)
 echo "🔄 Converting paths.txt to Unix format..."
-tr -d '\r' < /test-env/artifacts/paths.txt > /test-env/artifacts/cleaned_paths.txt
-mv /test-env/artifacts/cleaned_paths.txt /test-env/artifacts/paths.txt
+sed -i 's/\r$//' /test-env/artifacts/paths.txt  # This actually modifies the file
 
-echo "📝 Verifying paths.txt contents before reading...(after fix)"
-cat -A /test-env/artifacts/paths.txt  # Shows hidden characters like ^M (Windows newlines)
+# Re-print file contents to confirm the fix worked
+echo "📝 Verifying paths.txt contents after fix..."
+cat -A /test-env/artifacts/paths.txt
 
 # Read each package path from paths.txt and install
 while IFS= read -r PACKAGE_PATH || [[ -n "$PACKAGE_PATH" ]]; do
