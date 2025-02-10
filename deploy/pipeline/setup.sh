@@ -134,35 +134,38 @@ echo "🔍 Checking OS information..."
 if [[ -f "/etc/os-release" ]]; then
     echo "ℹ️ Contents of /etc/os-release:"
     cat /etc/os-release
+    source /etc/os-release
+    OS_ID="${ID,,}"  # Convert to lowercase to avoid case mismatches
 else
     echo "⚠️ Warning: /etc/os-release not found!"
+    OS_ID=""
 fi
 
-# ✅ **Step 2: Detect OS**
-if [[ -f "/etc/os-release" ]]; then
-    source /etc/os-release
-    OS_ID="$ID"
-elif [[ -x "$(command -v lsb_release)" ]]; then
+# **Fallback OS detection methods**
+if [[ -z "$OS_ID" ]] && command -v lsb_release &> /dev/null; then
     OS_ID=$(lsb_release -si | awk '{print tolower($1)}')
-elif [[ -f "/etc/debian_version" ]]; then
+elif [[ -z "$OS_ID" ]] && [[ -f "/etc/debian_version" ]]; then
     OS_ID="debian"
-elif [[ -f "/etc/redhat-release" ]]; then
+elif [[ -z "$OS_ID" ]] && [[ -f "/etc/redhat-release" ]]; then
     OS_ID="rhel"
-elif [[ -f "/etc/SuSE-release" ]]; then
+elif [[ -z "$OS_ID" ]] && [[ -f "/etc/SuSE-release" ]]; then
     OS_ID="suse"
-elif [[ -x "$(command -v uname)" ]]; then
-    KERNEL_NAME=$(uname -s)
-    if [[ "$KERNEL_NAME" == "Linux" ]]; then
+elif [[ -z "$OS_ID" ]] && command -v uname &> /dev/null; then
+    OS_KERNEL=$(uname -s)
+    if [[ "$OS_KERNEL" == "Linux" ]]; then
         OS_ID="linux"
     fi
-else
+fi
+
+# **Print detected OS**
+if [[ -z "$OS_ID" ]]; then
     echo "❌ ERROR: Unable to detect OS."
     exit 1
 fi
 
 echo "🔍 Detected OS: $OS_ID"
 
-# ✅ **Step 3: Determine Package Manager**
+# ✅ **Step 2: Determine Package Manager**
 if [[ "$OS_ID" == "ubuntu" || "$OS_ID" == "debian" ]]; then
     PKG_MANAGER="dpkg"
 elif [[ "$OS_ID" == "rhel" || "$OS_ID" == "rocky" || "$OS_ID" == "centos" ]]; then
@@ -180,7 +183,7 @@ fi
 
 echo "📂 Installing Kubernetes using: $PKG_MANAGER"
 
-# ✅ **Step 4: Install Kubernetes Components**
+# ✅ **Step 3: Install Kubernetes Components**
 if [[ "$PKG_MANAGER" == "dpkg" ]]; then
     echo "📦 Installing .deb packages..."
     find "$PKG_DIR" -type f -name "*.deb" -exec dpkg -i {} + || echo "⚠️ Warning Some packages may have failed to install."
@@ -219,6 +222,7 @@ case "$PKG_MANAGER" in
 esac
 
 echo "✅ Kubernetes installation complete."
+
 
 EOF
 
