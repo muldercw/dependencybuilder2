@@ -107,7 +107,7 @@ chmod -R u+rwX /test-env/artifacts  # Ensure read/write/execute permissions
 ls -lah /test-env/artifacts  # Verify ownership & permissions
 
 # ✅ Validate that .deb files exist before proceeding
-if [[ -z $(find /test-env/artifacts/ -type f -name "*.deb") ]]; then
+if ! find /test-env/artifacts/ -type f -name "*.deb" | grep -q .; then
     echo "❌ ERROR: No .deb packages found! Exiting..."
     exit 1
 fi
@@ -137,6 +137,7 @@ echo "🔍 Verifying installed Kubernetes components..."
 dpkg -l | grep -E "kubeadm|kubelet|kubectl|containerd" || echo "⚠️ Warning: Some Kubernetes components may not be installed."
 
 echo "✅ Validation complete."
+
 
 EOF
 
