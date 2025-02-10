@@ -35,7 +35,7 @@ jobs:
       K8S_VERSION: ${{ needs.read-kube-version.outputs.kube_version }}
     strategy:
       matrix:
-        os: [ubuntu]  # Add more OS types if needed
+        os: [ubuntu,debian,centos,rocky,fedora,arch,opensuse]
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
