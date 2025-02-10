@@ -125,13 +125,27 @@ echo "📦 Beginning installation of .deb packages..."
 
 echo "🚀 Starting installation of .deb packages..."
 
-# Read each package path from paths.txt and install one by one
-while IFS= read -r PACKAGE_PATH; do
-    # Skip empty lines (just in case)
-    [[ -z "$PACKAGE_PATH" ]] && continue 
+# Check if paths.txt exists and is not empty
+if [[ ! -s /test-env/artifacts/paths.txt ]]; then
+    echo "❌ ERROR: paths.txt is missing or empty! Exiting..."
+    exit 1
+fi
 
-    echo "📦 Processing: $PACKAGE_PATH"
-    
+echo "📝 Reading paths.txt line by line..."
+cat /test-env/artifacts/paths.txt  # Print contents for debugging
+
+# Read each package path from paths.txt and install one by one
+while IFS= read -r PACKAGE_PATH || [[ -n "$PACKAGE_PATH" ]]; do
+    echo "🔹 Read line: '$PACKAGE_PATH'"  # Debugging: Show each line read
+
+    # Skip empty lines (just in case)
+    if [[ -z "$PACKAGE_PATH" ]]; then
+        echo "⚠️ Skipping empty line"
+        continue 
+    fi
+
+    echo "📦 Processing package: $PACKAGE_PATH"
+
     # Check if the file actually exists before trying to install
     if [[ -f "$PACKAGE_PATH" ]]; then
         echo "✅ Installing: $PACKAGE_PATH"
@@ -144,16 +158,6 @@ while IFS= read -r PACKAGE_PATH; do
 done < /test-env/artifacts/paths.txt
 
 echo "✅ All installations complete."
-
-
-# 🔧 Resolve dependencies
-echo "🔧 Resolving dependencies..."
-if ! apt-get install -f -y; then
-    echo "❌ ERROR: Failed to resolve dependencies"
-    exit 1
-fi
-
-echo "✅ Installation complete!"
 
 EOF
 
