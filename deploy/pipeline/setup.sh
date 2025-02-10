@@ -134,20 +134,23 @@ fi
 echo "📝 Verifying paths.txt contents before reading..."
 cat -A /test-env/artifacts/paths.txt  # Shows hidden characters like ^M (Windows newlines)
 
-# 🚨 Hard fix: Rewrite file line-by-line to remove Windows-style newlines and trailing spaces
+# 🚨 HARD RESET: Completely rewrite file to ensure no weird encoding issues
 echo "🔄 Cleaning up paths.txt to ensure proper line endings..."
-awk '{gsub(/\r$/, ""); print}' /test-env/artifacts/paths.txt > /test-env/artifacts/paths_cleaned.txt
+tr -d '\r' < /test-env/artifacts/paths.txt | awk '{$1=$1};1' > /test-env/artifacts/paths_cleaned.txt
 mv /test-env/artifacts/paths_cleaned.txt /test-env/artifacts/paths.txt
 
-# Re-print file contents to confirm fix worked
+# 🚀 Print to confirm that the cleanup worked
 echo "📝 Verifying paths.txt contents after fix..."
 cat -A /test-env/artifacts/paths.txt
 
 echo "📦 Beginning installation of .deb packages..."
-while IFS= read -r PACKAGE_PATH || [[ -n "$PACKAGE_PATH" ]]; do
-    PACKAGE_PATH=$(echo "$PACKAGE_PATH" | tr -d '\r' | xargs)  # Force trim any bad characters
 
+# 🛠 Read paths.txt **correctly**, ensuring it actually gets read
+while IFS= read -r PACKAGE_PATH || [[ -n "$PACKAGE_PATH" ]]; do
     echo "🔹 Debug: Read raw line -> '$PACKAGE_PATH'"
+
+    # 🚨 Ensure each line is actually getting stored properly
+    PACKAGE_PATH=$(echo "$PACKAGE_PATH" | tr -d '\r' | xargs)  # Force clean input
 
     # Skip empty lines
     if [[ -z "$PACKAGE_PATH" ]]; then
@@ -155,9 +158,7 @@ while IFS= read -r PACKAGE_PATH || [[ -n "$PACKAGE_PATH" ]]; do
         continue 
     fi
 
-    echo "📦 Processing package: $PACKAGE_PATH"
-
-    # Check if the file actually exists before trying to install
+    # 🚨 Check if file actually exists
     if [[ -f "$PACKAGE_PATH" ]]; then
         echo "✅ Installing: $PACKAGE_PATH"
         dpkg -i "$PACKAGE_PATH" || echo "⚠️ Warning: Failed to install $PACKAGE_PATH"
@@ -169,8 +170,6 @@ while IFS= read -r PACKAGE_PATH || [[ -n "$PACKAGE_PATH" ]]; do
 done < /test-env/artifacts/paths.txt
 
 echo "✅ All installations complete."
-
-
 
 EOF
 
