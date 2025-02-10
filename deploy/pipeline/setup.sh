@@ -130,12 +130,11 @@ PKG_DIR="/test-env/artifacts/"
 # ✅ **Step 1: Debug OS Detection**
 echo "🔍 Checking OS information..."
 
-# Print /etc/os-release if it exists
+# **Ensure /etc/os-release exists before sourcing it**
 if [[ -f "/etc/os-release" ]]; then
     echo "ℹ️ Contents of /etc/os-release:"
     cat /etc/os-release
-    source /etc/os-release
-    OS_ID="${ID,,}"  # Convert to lowercase to avoid case mismatches
+    OS_ID=$(grep -E "^ID=" /etc/os-release | cut -d= -f2 | tr -d '"')  # Extract ID manually
 else
     echo "⚠️ Warning: /etc/os-release not found!"
     OS_ID=""
@@ -222,7 +221,6 @@ case "$PKG_MANAGER" in
 esac
 
 echo "✅ Kubernetes installation complete."
-
 
 EOF
 
