@@ -61,12 +61,6 @@ jobs:
       - name: Run Kubernetes Dependency & Package Indexer
         run: docker exec build-container bash -c "bash /repo/deploy/pipeline/setup.sh ${{ matrix.os }} $K8S_VERSION /test-env/artifacts"
 
-      - name: Debug List Artifacts Inside Build Container
-        run: docker exec build-container ls -lah /test-env/artifacts || echo "⚠️ Warning /test-env/artifacts does not exist!"
-
-      - name: Extract Built Artifacts from Container
-        run: docker cp build-container:/test-env/artifacts ./artifacts || echo "⚠️ Warning No artifacts found to copy!"
-
       - name: Stop Build Container
         run: docker stop build-container || echo "⚠️ Warning Build container was already stopped."
 
