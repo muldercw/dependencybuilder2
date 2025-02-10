@@ -154,7 +154,6 @@ $SUDO apt-get install -f -y
 
 echo "✅ Installation complete!"
 
-
 EOF
 
 chmod +x "$INSTALL_SCRIPT"
