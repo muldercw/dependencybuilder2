@@ -62,7 +62,7 @@ jobs:
         run: docker exec build-container bash -c "bash /repo/deploy/pipeline/setup.sh ${{ matrix.os }} $K8S_VERSION /test-env/artifacts"
 
       - name: Stop Build Container
-        run: docker stop build-container || echo "⚠️ Warning Build container was already stopped."
+        run: docker stop build-container || echo "Warning Build container was already stopped."
 
       - name: Upload Offline Package Archive
         uses: actions/upload-artifact@v4
@@ -117,7 +117,7 @@ jobs:
           docker run --rm -d --name test-container --network none -v "$PWD/artifacts:/test-env/artifacts" "$IMAGE" tail -f /dev/null
 
       - name: Debug List Extracted Files Inside Test Container
-        run: docker exec test-container ls -lah /test-env/artifacts || echo "⚠️ Warning No extracted packages found!"
+        run: docker exec test-container ls -lah /test-env/artifacts || echo "Warning No extracted packages found!"
 
       - name: Extract Offline Packages Inside Test Container
         run: docker exec test-container bash -c "mkdir -p /test-env/artifacts && tar -xvf /test-env/artifacts/offline_packages_${{ matrix.os }}_${{ env.K8S_VERSION }}.tar.gz -C /test-env/artifacts/ || echo 'No extraction needed'"
@@ -126,4 +126,4 @@ jobs:
         run: docker exec test-container bash -c "chmod +x /test-env/artifacts/install_${{ matrix.os }}_${{ env.K8S_VERSION }}.sh && /test-env/artifacts/install_${{ matrix.os }}_${{ env.K8S_VERSION }}.sh"
 
       - name: Stop Test Container
-        run: docker stop test-container || echo "⚠️ Warning Test container was already stopped."
+        run: docker stop test-container || echo "Warning Test container was already stopped."
