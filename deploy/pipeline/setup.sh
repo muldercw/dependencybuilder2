@@ -125,40 +125,51 @@ dpkg --configure -a || echo "⚠️ Warning: Some packages may still be unconfig
 echo "🔍 Verifying installed Kubernetes components..."
 dpkg -l | grep -E "kubeadm|kubelet|kubectl"
 
-# 🚀 **Start Kubernetes Services Manually If Necessary**
+# 🚀 **Start Kubernetes Services Manually**
 echo "🚀 Attempting to start Kubernetes services manually..."
 
-# Start containerd manually if service command fails
-if ! command -v service &> /dev/null || ! service containerd restart; then
-    echo "⚠️ 'service' command failed for containerd. Attempting manual start..."
+# ✅ Start containerd if missing
+if ! pgrep -x "containerd" > /dev/null; then
+    echo "⚠️ containerd is not running. Attempting to start it..."
+
     if command -v containerd &> /dev/null; then
         echo "🔹 Manually starting containerd..."
         nohup containerd > /var/log/containerd.log 2>&1 &
         sleep 5
     else
         echo "❌ containerd binary not found! Kubernetes will not function properly."
+        exit 1
     fi
 fi
 
-# Start kubelet manually if service command fails
-if ! command -v service &> /dev/null || ! service kubelet restart; then
-    echo "⚠️ 'service' command failed for kubelet. Attempting manual start..."
+# ✅ Validate containerd socket
+if [[ ! -S "/run/containerd/containerd.sock" ]]; then
+    echo "❌ ERROR: containerd socket not found at /run/containerd/containerd.sock!"
+    exit 1
+fi
+
+# ✅ Start kubelet if missing
+if ! pgrep -x "kubelet" > /dev/null; then
+    echo "⚠️ kubelet is not running. Attempting to start it..."
+
     if command -v kubelet &> /dev/null; then
         echo "🔹 Manually starting kubelet..."
         nohup kubelet > /var/log/kubelet.log 2>&1 &
         sleep 5
     else
         echo "❌ kubelet binary not found! Kubernetes will not function properly."
+        exit 1
     fi
 fi
 
-# ✅ **Check if kubelet and containerd are running**
+# ✅ **Check if services are running**
 echo "🔍 Verifying Kubernetes components..."
 
 if pgrep -x "containerd" > /dev/null; then
     echo "✅ containerd is running."
 else
     echo "❌ containerd is NOT running!"
+    exit 1
 fi
 
 if pgrep -x "kubelet" > /dev/null; then
@@ -167,6 +178,7 @@ else
     echo "❌ kubelet is NOT running!"
     echo "🔎 Checking kubelet logs for errors..."
     tail -n 10 /var/log/kubelet.log || echo "⚠️ Could not read kubelet logs!"
+    exit 1
 fi
 
 echo "✅ Kubernetes startup validation complete."
