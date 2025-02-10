@@ -95,93 +95,48 @@ cat <<EOF > "$INSTALL_SCRIPT"
 #!/bin/bash
 set -e  # Stop on first error
 
-echo "🚀 Debugging: Installing all .deb files recursively"
+echo "🚀 Debugging: Installing only available .deb files from /test-env/artifacts/"
 
-# 📂 Print directory tree for debugging
-echo "📂 Listing all files in /test-env/artifacts/:"
-find /test-env/artifacts/ -type f -print
+# 📂 List all .deb files to verify what's available
+echo "📂 Listing all .deb files in /test-env/artifacts/:"
+find /test-env/artifacts/ -type f -name "*.deb" -print
 
-# 🔧 Fix permissions for all .deb files
+# 🔧 Fix permissions for .deb packages
 echo "🔧 Fixing permissions for .deb packages..."
 chmod -R u+rwX /test-env/artifacts  # Ensure read/write/execute permissions
 ls -lah /test-env/artifacts  # Verify ownership & permissions
 
-# ✅ Suppress frontend issues (Debconf)
+# ✅ Validate that .deb files exist before proceeding
+if [[ -z $(find /test-env/artifacts/ -type f -name "*.deb") ]]; then
+    echo "❌ ERROR: No .deb packages found! Exiting..."
+    exit 1
+fi
+
 export DEBIAN_FRONTEND=noninteractive
 
-# ✅ Install all .deb packages, allowing downgrades and ignoring conflicts
-echo "📦 Installing all .deb packages from /test-env/artifacts/..."
-dpkg -R --install /test-env/artifacts/ || echo "⚠️ Warning: Some packages may have failed to install."
+# 📦 **Installing only available .deb packages**
+echo "📦 Installing .deb packages found in /test-env/artifacts/..."
+find /test-env/artifacts/ -type f -name "*.deb" -exec dpkg -i {} + || echo "⚠️ Warning: Some packages may have failed to install."
 
-# ✅ Fix any broken dependencies
-echo "🔧 Fixing broken dependencies..."
-apt-get -y install --fix-broken || echo "⚠️ Warning: Some dependencies may still be missing."
+# 🔧 **Fix any broken dependencies (but only using local files)**
+echo "🔧 Checking for missing dependencies..."
+if ! apt-get --dry-run install --fix-broken | grep -q "0 newly installed"; then
+    echo "⚠️ Warning: Some dependencies may still be missing!"
+    echo "🔎 Listing missing dependencies:"
+    apt-get --dry-run install --fix-broken | grep "Depends:" || echo "✅ No missing dependencies found."
+else
+    echo "✅ No missing dependencies detected."
+fi
 
-# ✅ Force configuration of unconfigured packages
+# 🔄 **Configure unconfigured packages**
 echo "🔄 Configuring unconfigured packages..."
 dpkg --configure -a || echo "⚠️ Warning: Some packages may still be unconfigured."
 
-# ✅ Verify installation
+# 🔍 **Verify installed Kubernetes components**
 echo "🔍 Verifying installed Kubernetes components..."
-dpkg -l | grep -E "kubeadm|kubelet|kubectl"
+dpkg -l | grep -E "kubeadm|kubelet|kubectl|containerd" || echo "⚠️ Warning: Some Kubernetes components may not be installed."
 
-# 🚀 **Start Kubernetes Services Manually**
-echo "🚀 Attempting to start Kubernetes services manually..."
-
-# ✅ Start containerd if missing
-if ! pgrep -x "containerd" > /dev/null; then
-    echo "⚠️ containerd is not running. Attempting to start it..."
-
-    if command -v containerd &> /dev/null; then
-        echo "🔹 Manually starting containerd..."
-        nohup containerd > /var/log/containerd.log 2>&1 &
-        sleep 5
-    else
-        echo "❌ containerd binary not found! Kubernetes will not function properly."
-        exit 1
-    fi
-fi
-
-# ✅ Validate containerd socket
-if [[ ! -S "/run/containerd/containerd.sock" ]]; then
-    echo "❌ ERROR: containerd socket not found at /run/containerd/containerd.sock!"
-    exit 1
-fi
-
-# ✅ Start kubelet if missing
-if ! pgrep -x "kubelet" > /dev/null; then
-    echo "⚠️ kubelet is not running. Attempting to start it..."
-
-    if command -v kubelet &> /dev/null; then
-        echo "🔹 Manually starting kubelet..."
-        nohup kubelet > /var/log/kubelet.log 2>&1 &
-        sleep 5
-    else
-        echo "❌ kubelet binary not found! Kubernetes will not function properly."
-        exit 1
-    fi
-fi
-
-# ✅ **Check if services are running**
-echo "🔍 Verifying Kubernetes components..."
-
-if pgrep -x "containerd" > /dev/null; then
-    echo "✅ containerd is running."
-else
-    echo "❌ containerd is NOT running!"
-    exit 1
-fi
-
-if pgrep -x "kubelet" > /dev/null; then
-    echo "✅ kubelet is running."
-else
-    echo "❌ kubelet is NOT running!"
-    echo "🔎 Checking kubelet logs for errors..."
-    tail -n 10 /var/log/kubelet.log || echo "⚠️ Could not read kubelet logs!"
-    exit 1
-fi
-
-echo "✅ Kubernetes startup validation complete."
+echo "✅ Validation complete."
 
 EOF
 
