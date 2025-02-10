@@ -30,7 +30,7 @@ INSTALL_SCRIPT="$ARTIFACTS_DIR/install_${OS}_${K8S_VERSION}.sh"
 CHECKSUM_FILE="$ARTIFACTS_DIR/checksums_${OS}_${K8S_VERSION}.sha256"
 DEPENDENCIES_FILE="$ARTIFACTS_DIR/dependencies.yaml"
 
-# Validate OS
+# Determine Package Manager
 if [[ "$OS" == "ubuntu" || "$OS" == "debian" ]]; then
     PKG_MANAGER="apt"
 elif [[ "$OS" == "centos" || "$OS" == "rocky" || "$OS" == "fedora" ]]; then
@@ -75,26 +75,27 @@ elif [[ "$PKG_MANAGER" == "dnf" ]]; then
     echo "🔗 Enabling Kubernetes repository for $OS..."
     dnf install -y dnf-plugins-core
     dnf config-manager --add-repo "https://pkgs.k8s.io/core:/stable:/v${K8S_MAJOR_MINOR}/rpm/"
-    
+
     PKGS="kubeadm-${K8S_VERSION} kubelet-${K8S_VERSION} kubectl-${K8S_VERSION} cri-tools conntrack iptables iproute ethtool"
-    
+
     echo "📥 Downloading Kubernetes packages..."
     dnf download --resolve $PKGS
 
 elif [[ "$PKG_MANAGER" == "pacman" ]]; then
-    echo "🔗 Enabling Kubernetes repository for Arch Linux..."
+    echo "🔗 Configuring Arch Linux repository..."
+    pacman-key --init
+    pacman-key --populate archlinux
     pacman -Sy --noconfirm archlinux-keyring
-    pacman -Sy --noconfirm kubeadm kubelet kubectl cri-tools conntrack-tools iptables iproute2 ethtool
 
-    echo "📥 Downloading packages..."
-    pacman -Sw --cachedir="$PKG_DIR" --noconfirm kubeadm kubelet kubectl cri-tools conntrack-tools iptables iproute2 ethtool
+    PKGS="kubeadm kubelet kubectl cri-tools conntrack-tools iptables iproute2 ethtool"
+
+    echo "📥 Downloading Kubernetes packages and dependencies..."
+    pacman -Sw --noconfirm --cachedir="$PKG_DIR" $PKGS
 
 elif [[ "$PKG_MANAGER" == "zypper" ]]; then
     echo "🔗 Enabling Kubernetes repository for OpenSUSE..."
-    zypper ar -f "https://pkgs.k8s.io/core:/stable:/v${K8S_MAJOR_MINOR}/rpm/" Kubernetes
-
-    echo "📥 Downloading packages..."
-    zypper --no-gpg-checks --download-only install -y kubeadm kubelet kubectl cri-tools conntrack iptables iproute2 ethtool
+    zypper --gpg-auto-import-keys refresh
+    zypper --non-interactive install --download-only kubeadm kubelet kubectl cri-tools conntrack iptables iproute2 ethtool
 fi
 
 # ✅ **Step 2: Move all downloaded packages to artifacts**
