@@ -99,76 +99,43 @@ echo "🚀 Debugging: Searching for all .deb files"
 echo "📂 Listing all files recursively from /test-env/artifacts/:"
 find /test-env/artifacts/ -type f -print
 
+# 🔧 Fix permissions for all .deb files
 echo "🔧 Fixing permissions for .deb packages..."
-chmod -R u+rwX /test-env/artifacts  # Give user read/write/execute permissions
-ls -lah /test-env/artifacts # Verify ownership & permissions
+chmod -R u+rwX /test-env/artifacts  # Ensure read/write/execute permissions
+ls -lah /test-env/artifacts  # Verify ownership & permissions
 
-# 🔎 Use 'find' and directly write to paths.txt (avoids variable issues)
+# 🔎 Find and Install .deb Files
 echo "🔍 Searching for .deb files..."
-find /test-env/artifacts/ -type f -name "*.deb" -print > /test-env/artifacts/paths.txt 2>/dev/null
+DEB_FILES=$(find /test-env/artifacts/ -type f -name "*.deb" 2>/dev/null)
 
-# 📂 Print paths.txt content to verify it was correctly written
-echo "📝 Verifying paths.txt contents..."
-cat /test-env/artifacts/paths.txt || echo "❌ ERROR: paths.txt not found!"
-
-# ✅ Check if paths.txt is non-empty
-if [[ ! -s /test-env/artifacts/paths.txt ]]; then
-    echo "❌ ERROR: No .deb packages found! paths.txt is empty."
+# 📝 Verify found packages
+if [[ -z "$DEB_FILES" ]]; then
+    echo "❌ ERROR: No .deb packages found!"
     exit 1
 fi
 
-echo "✅ Successfully saved .deb file paths:"
-cat /test-env/artifacts/paths.txt
+echo "✅ Found the following .deb packages:"
+echo "$DEB_FILES"
 
 # 🚀 INSTALLING PACKAGES
 echo "📦 Beginning installation of .deb packages..."
+for PACKAGE_PATH in $DEB_FILES; do
+    echo "-----------------------------------"
+    echo "🔹 Installing: $PACKAGE_PATH"
 
-echo "🚀 Starting installation of .deb packages..."
-
-# Ensure paths.txt exists and is not empty
-if [[ ! -s /test-env/artifacts/paths.txt ]]; then
-    echo "❌ ERROR: paths.txt is missing or empty! Exiting..."
-    exit 1
-fi
-
-echo "📝 Verifying paths.txt contents before reading..."
-cat -A /test-env/artifacts/paths.txt  # Shows hidden characters like ^M (Windows newlines)
-
-# 🔄 Convert file to clean Unix format (force removal of Windows line endings)
-echo "🔄 Cleaning up paths.txt to ensure proper line endings..."
-sed -i 's/\r$//' /test-env/artifacts/paths.txt  # Remove carriage returns
-sed -i 's/[[:space:]]*$//' /test-env/artifacts/paths.txt  # Remove trailing spaces
-
-echo "📝 Verifying paths.txt contents after fix..."
-cat -A /test-env/artifacts/paths.txt  # Verify changes applied
-
-echo "📦 Beginning installation of .deb packages..."
-while IFS= read -r PACKAGE_PATH || [[ -n "$PACKAGE_PATH" ]]; do
-    echo "🔹 Debug: Read raw line -> '$PACKAGE_PATH'"
-
-    # Strip out remaining unwanted characters
-    PACKAGE_PATH=$(echo "$PACKAGE_PATH" | tr -d '\r' | xargs)
-
-    # Skip empty lines
-    if [[ -z "$PACKAGE_PATH" ]]; then
-        echo "⚠️ Skipping empty line"
-        continue
-    fi
-
-    # 🚨 Verify the file exists
+    # 🚨 Verify file exists
     if [[ ! -f "$PACKAGE_PATH" ]]; then
         echo "❌ ERROR: File not found - $PACKAGE_PATH"
         continue
     fi
 
-    echo "✅ Installing: $PACKAGE_PATH"
+    # 🛠 Install package
     dpkg -i "$PACKAGE_PATH" || echo "⚠️ Warning: Failed to install $PACKAGE_PATH"
 
-    echo "-----------------------------------"
-done < <(cat -A /test-env/artifacts/paths.txt)  # Ensures it's read as expected
+    echo "✅ Installed: $PACKAGE_PATH"
+done
 
 echo "✅ All installations complete."
-
 
 EOF
 
