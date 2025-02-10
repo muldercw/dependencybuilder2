@@ -99,22 +99,29 @@ echo "🚀 Debugging: Searching for all .deb files"
 echo "📂 Listing all files recursively from /test-env/artifacts/:"
 find /test-env/artifacts/ -type f
 
-# 🔍 Find all `.deb` files and print them
-echo "🔎 Searching for all .deb files..."
-mapfile -t DEB_FILES < <(find /test-env/artifacts/ -type f -name "*.deb" 2>/dev/null)
+# 🔎 Corrected: Search for .deb files
+mapfile -t DEB_FILES < <(find /test-env/artifacts/ -type f -name "*.deb" -print 2>/dev/null)
 
-# 📦 If no files found, print error and exit
-if [[ ${#DEB_FILES[@]} -eq 0 ]]; then
-    echo "❌ ERROR: No .deb packages found!"
+# 📝 Debug: Print what we found
+echo "🔍 DEBUG: Found .deb files:"
+for file in "${DEB_FILES[@]}"; do
+    echo "📝 Found: $file"
+done
+
+# 📝 Write found files to paths.txt
+> /test-env/artifacts/paths.txt  # Clear existing file
+for file in "${DEB_FILES[@]}"; do
+    echo "$file" >> /test-env/artifacts/paths.txt
+done
+
+# ✅ Confirm paths.txt was created
+if [[ ! -s /test-env/artifacts/paths.txt ]]; then
+    echo "❌ ERROR: No .deb packages found! paths.txt is empty."
     exit 1
 fi
 
-# ✅ Print all found `.deb` files
-echo "📝 Found the following .deb files:"
-for FILE in "${DEB_FILES[@]}"; do
-    echo "  - $FILE"
-done
-
+echo "✅ Saved .deb file paths to paths.txt:"
+cat /test-env/artifacts/paths.txt
 
 EOF
 
