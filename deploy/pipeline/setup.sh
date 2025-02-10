@@ -107,13 +107,14 @@ fi
 echo "📂 Listing all files in /test-env/artifacts/ before installation:"
 find /test-env/artifacts/ -type f
 
-# 🔎 **Explicitly Set Package Directory**
-DEB_DIR="/test-env/artifacts/var/cache/apt/archives"
+# 🔎 **Detect .deb Package Directory**
+DEB_DIR=$(find /test-env/artifacts/ -type d -path "*/var/cache/apt/archives" 2>/dev/null | head -n 1)
 
 # **Ensure Package Directory Exists**
-if [[ ! -d "$DEB_DIR" || -z "$DEB_DIR" ]]; then
-    echo "❌ ERROR: Package directory '$DEB_DIR' does not exist!"
-    ls -lah /test-env/artifacts/ || echo "❌ ERROR: Could not list artifacts directory!"
+if [[ -z "$DEB_DIR" || ! -d "$DEB_DIR" ]]; then
+    echo "❌ ERROR: Could not find the package directory!"
+    echo "🔍 Scanning for possible package directories..."
+    find /test-env/artifacts/ -type d
     exit 1
 else
     echo "✅ Using package directory: $DEB_DIR"
