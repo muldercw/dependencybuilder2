@@ -122,17 +122,36 @@ tar --exclude="*/partial/*" --ignore-failed-read -czvf "$TAR_FILE" -C "$PKG_DIR"
 echo "📝 Generating installation script: $INSTALL_SCRIPT"
 cat <<EOF > "$INSTALL_SCRIPT"
 #!/bin/bash
-set -e
+set -e  # Stop on first error
 
 echo "🚀 Installing only available packages from /test-env/artifacts/"
 PKG_DIR="/test-env/artifacts/"
 
 echo "🔍 Checking OS information..."
+
 if [[ -f "/etc/os-release" ]]; then
-    echo "ℹ️ Contents of /etc/os-release:"
+    echo "ℹ️ Contents of /etc/os-release (plain cat):"
     cat /etc/os-release
 
-    # -- Very lenient checks: just look for the word ubuntu / debian / centos, etc.
+    echo
+    echo "=== DEBUG: cat -A /etc/os-release (shows non-printable symbols) ==="
+    # 'cat -A' may not always be available in minimal images, but let's try
+    cat -A /etc/os-release || echo "Warning: 'cat -A' not found."
+
+    echo
+    echo "=== DEBUG: xxd /etc/os-release (hex dump) ==="
+    # 'xxd' may not always be installed, but let's try
+    xxd /etc/os-release || echo "Warning: 'xxd' not installed."
+
+    echo
+    echo "=== DEBUG: Checking if we can grep 'ubuntu' at all ==="
+    if grep -i 'ubuntu' /etc/os-release; then
+        echo "Found 'ubuntu' substring in /etc/os-release"
+    else
+        echo "No match for 'ubuntu' substring in /etc/os-release"
+    fi
+
+    # -- Super-lenient grep approach (just look for keywords) --
     if grep -iq 'ubuntu' /etc/os-release; then
         OS_ID="ubuntu"
     elif grep -iq 'debian' /etc/os-release; then
@@ -152,13 +171,14 @@ if [[ -f "/etc/os-release" ]]; then
     else
         OS_ID=""
     fi
+
     echo "DEBUG: OS_ID (from super-lenient grep) = '$OS_ID'"
 else
     echo "⚠️ Warning: /etc/os-release not found!"
     OS_ID=""
 fi
 
-# -- Fallback detection if OS_ID is still empty --
+# === Fallback detection if OS_ID is still empty ===
 if [[ -z "$OS_ID" ]]; then
     if command -v lsb_release &> /dev/null; then
         OS_ID=$(lsb_release -si | awk '{print tolower($1)}')
@@ -182,6 +202,9 @@ if [[ -z "$OS_ID" ]]; then
 fi
 
 echo "🔍 Detected OS: $OS_ID"
+
+# === Then proceed with your package manager logic below ===
+
 
 # === Step 2: Determine Package Manager ===
 if [[ "$OS_ID" == "ubuntu" || "$OS_ID" == "debian" ]]; then
