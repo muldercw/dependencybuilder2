@@ -124,7 +124,7 @@ tar --exclude="*/partial/*" --ignore-failed-read -czvf "$TAR_FILE" -C "$PKG_DIR"
 
 # ✅ **Step 4: Generate Install Script**
 echo "📝 Generating installation script: $INSTALL_SCRIPT"
-cat <<EOF > "$INSTALL_SCRIPT"
+cat <<'EOF' > "$INSTALL_SCRIPT"
 #!/bin/bash
 set -e  # Stop on first error
 
@@ -170,9 +170,6 @@ fi
 if readonly -p 2>/dev/null | grep -q ' DETECTED_OS='; then
   echo "WARNING: DETECTED_OS is read-only!"
 fi
-
-# 0.7) Dump environment for final clues (optional)
-# env | sort
 
 ###############################################################################
 # Begin: Our normal script logic
