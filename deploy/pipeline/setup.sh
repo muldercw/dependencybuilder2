@@ -127,25 +127,29 @@ set -e  # Stop on first error
 echo "🚀 Installing only available packages from /test-env/artifacts/"
 PKG_DIR="/test-env/artifacts/"
 
-# ✅ **Step 1: Debug OS Detection**
+# === Step 1: Debug OS Detection ===
 echo "🔍 Checking OS information..."
 
 if [[ -f "/etc/os-release" ]]; then
     echo "ℹ️ Contents of /etc/os-release:"
     cat /etc/os-release
-
-    # Parse /etc/os-release for `ID=...`
-    # If there's a chance of Windows line endings, you can also pipe through dos2unix
-    # e.g. `grep '^ID=' /etc/os-release | dos2unix | cut -d= -f2 | tr -d '"'`
-    OS_ID=$(grep '^ID=' /etc/os-release | cut -d= -f2 | tr -d '"')
-    # Optionally confirm what we got
-    echo "DEBUG: OS_ID (from /etc/os-release) = $OS_ID"
+    
+    # Safely parse /etc/os-release for ID=... 
+    # 1) Remove any CR characters (\r).
+    # 2) Remove a possible BOM at the start of the file.
+    # 3) Extract the line starting exactly with 'ID=' after cleaning.
+    OS_ID=$(
+      sed 's/\r//g; s/^\xEF\xBB\xBF//g' /etc/os-release \
+      | sed -n 's/^ID=//p' \
+      | tr -d '"'
+    )
+    echo "DEBUG: OS_ID (from /etc/os-release) = '$OS_ID'"
 else
     echo "⚠️ Warning: /etc/os-release not found!"
     OS_ID=""
 fi
 
-# **Fallback OS detection methods** (only if $OS_ID was not parsed)
+# == Fallback OS detection methods if /etc/os-release was incomplete ==
 if [[ -z "$OS_ID" ]]; then
     if command -v lsb_release &> /dev/null; then
         OS_ID=$(lsb_release -si | awk '{print tolower($1)}')
@@ -163,14 +167,14 @@ if [[ -z "$OS_ID" ]]; then
     fi
 fi
 
-# **Special Handling for Arch Linux** (if needed)
+# Special Handling for Arch Linux
 if [[ -z "$OS_ID" ]] && [[ -f "/etc/os-release" ]]; then
     if grep -qi "Arch Linux" /etc/os-release; then
         OS_ID="arch"
     fi
 fi
 
-# **Print detected OS**
+# Print detected OS
 if [[ -z "$OS_ID" ]]; then
     echo "❌ ERROR: Unable to detect OS."
     exit 1
@@ -178,7 +182,7 @@ fi
 
 echo "🔍 Detected OS: $OS_ID"
 
-# ✅ **Step 2: Determine Package Manager**
+# === Step 2: Determine Package Manager ===
 if [[ "$OS_ID" == "ubuntu" || "$OS_ID" == "debian" ]]; then
     PKG_MANAGER="dpkg"
 elif [[ "$OS_ID" == "rhel" || "$OS_ID" == "rocky" || "$OS_ID" == "centos" ]]; then
@@ -193,6 +197,7 @@ else
     echo "❌ ERROR: Unsupported OS: $OS_ID"
     exit 1
 fi
+
 
 echo "📂 Installing Kubernetes using: $PKG_MANAGER"
 
