@@ -134,18 +134,18 @@ if [[ -f "/etc/os-release" ]]; then
     echo "ℹ️ Contents of /etc/os-release:"
     cat /etc/os-release
 
-    # Source /etc/os-release directly (avoid grep parsing issues)
-    # shellcheck disable=SC1091
-    . /etc/os-release
-
-    # The OS "ID" is typically set here (e.g., 'ubuntu', 'centos', 'fedora', 'opensuse', etc.)
-    OS_ID="$ID"
+    # Parse /etc/os-release for `ID=...`
+    # If there's a chance of Windows line endings, you can also pipe through dos2unix
+    # e.g. `grep '^ID=' /etc/os-release | dos2unix | cut -d= -f2 | tr -d '"'`
+    OS_ID=$(grep '^ID=' /etc/os-release | cut -d= -f2 | tr -d '"')
+    # Optionally confirm what we got
+    echo "DEBUG: OS_ID (from /etc/os-release) = $OS_ID"
 else
     echo "⚠️ Warning: /etc/os-release not found!"
     OS_ID=""
 fi
 
-# **Fallback OS detection methods** (only if $OS_ID was not set from /etc/os-release)
+# **Fallback OS detection methods** (only if $OS_ID was not parsed)
 if [[ -z "$OS_ID" ]]; then
     if command -v lsb_release &> /dev/null; then
         OS_ID=$(lsb_release -si | awk '{print tolower($1)}')
@@ -164,10 +164,10 @@ if [[ -z "$OS_ID" ]]; then
 fi
 
 # **Special Handling for Arch Linux** (if needed)
-# If /etc/os-release doesn't identify Arch properly,
-# we can search for "Arch Linux" in the file as a fallback
-if [[ -z "$OS_ID" ]] && grep -qi "Arch Linux" /etc/os-release 2>/dev/null; then
-    OS_ID="arch"
+if [[ -z "$OS_ID" ]] && [[ -f "/etc/os-release" ]]; then
+    if grep -qi "Arch Linux" /etc/os-release; then
+        OS_ID="arch"
+    fi
 fi
 
 # **Print detected OS**
@@ -235,7 +235,6 @@ case "$PKG_MANAGER" in
 esac
 
 echo "✅ Kubernetes installation complete."
-
 
 EOF
 
