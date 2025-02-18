@@ -122,7 +122,7 @@ tar --exclude="*/partial/*" --ignore-failed-read -czvf "$TAR_FILE" -C "$PKG_DIR"
 echo "📝 Generating installation script: $INSTALL_SCRIPT"
 cat <<EOF > "$INSTALL_SCRIPT"
 #!/bin/bash
-set -e  # Stop on first error
+set -e
 
 echo "🚀 Installing only available packages from /test-env/artifacts/"
 PKG_DIR="/test-env/artifacts/"
@@ -132,34 +132,33 @@ if [[ -f "/etc/os-release" ]]; then
     echo "ℹ️ Contents of /etc/os-release:"
     cat /etc/os-release
 
-    # -- Hard-coded checks for each known OS ID --
-    if grep -iq '^ID=.*ubuntu' /etc/os-release; then
+    # -- Very lenient checks: just look for the word ubuntu / debian / centos, etc.
+    if grep -iq 'ubuntu' /etc/os-release; then
         OS_ID="ubuntu"
-    elif grep -iq '^ID=.*debian' /etc/os-release; then
+    elif grep -iq 'debian' /etc/os-release; then
         OS_ID="debian"
-    elif grep -iq '^ID=.*centos' /etc/os-release; then
+    elif grep -iq 'centos' /etc/os-release; then
         OS_ID="centos"
-    elif grep -iq '^ID=.*rhel' /etc/os-release; then
-        OS_ID="rhel"
-    elif grep -iq '^ID=.*rocky' /etc/os-release; then
+    elif grep -iq 'rocky' /etc/os-release; then
         OS_ID="rocky"
-    elif grep -iq '^ID=.*fedora' /etc/os-release; then
+    elif grep -iq 'rhel' /etc/os-release; then
+        OS_ID="rhel"
+    elif grep -iq 'fedora' /etc/os-release; then
         OS_ID="fedora"
-    elif grep -iq '^ID=.*arch' /etc/os-release; then
+    elif grep -iq 'arch' /etc/os-release; then
         OS_ID="arch"
-    elif grep -iq '^ID=.*suse' /etc/os-release; then
-        OS_ID="opensuse"
+    elif grep -iq 'suse' /etc/os-release; then
+        OS_ID="suse"
     else
         OS_ID=""
     fi
-
-    echo "DEBUG: OS_ID (from custom grep checks) = '$OS_ID'"
+    echo "DEBUG: OS_ID (from super-lenient grep) = '$OS_ID'"
 else
     echo "⚠️ Warning: /etc/os-release not found!"
     OS_ID=""
 fi
 
-# === Fallback detection if OS_ID is still empty ===
+# -- Fallback detection if OS_ID is still empty --
 if [[ -z "$OS_ID" ]]; then
     if command -v lsb_release &> /dev/null; then
         OS_ID=$(lsb_release -si | awk '{print tolower($1)}')
@@ -184,7 +183,7 @@ fi
 
 echo "🔍 Detected OS: $OS_ID"
 
-# -- Step 2: Determine Package Manager Based on OS_ID --
+# === Step 2: Determine Package Manager ===
 if [[ "$OS_ID" == "ubuntu" || "$OS_ID" == "debian" ]]; then
     PKG_MANAGER="dpkg"
 elif [[ "$OS_ID" == "rhel" || "$OS_ID" == "rocky" || "$OS_ID" == "centos" ]]; then
@@ -193,7 +192,7 @@ elif [[ "$OS_ID" == "fedora" ]]; then
     PKG_MANAGER="dnf_fedora"
 elif [[ "$OS_ID" == "arch" ]]; then
     PKG_MANAGER="pacman"
-elif [[ "$OS_ID" == "opensuse" || "$OS_ID" == "suse" ]]; then
+elif [[ "$OS_ID" == "suse" || "$OS_ID" == "opensuse" ]]; then
     PKG_MANAGER="zypper"
 else
     echo "❌ ERROR: Unsupported OS: $OS_ID"
@@ -201,6 +200,9 @@ else
 fi
 
 echo "📂 Installing Kubernetes using: $PKG_MANAGER"
+
+# ... remainder of your install steps ...
+
 
 
 
