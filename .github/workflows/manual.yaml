@@ -1,0 +1,139 @@
+name: "Offline Installer Builder"
+
+on:
+  # Keep this if you still want the (effectively disabled) push trigger
+  push:
+    branches:
+      - manual-branch-non-existent
+
+  # Primary trigger for manual runs
+  workflow_dispatch:
+    inputs:
+      kubernetes_version:
+        description: "Kubernetes version to build with"
+        required: true
+        default: "1.27.3"
+      operating_system:
+        description: "Operating system to build packages for (e.g. ubuntu, centos)"
+        required: true
+        default: "ubuntu"
+      os_version:
+        description: "Operating system version (e.g. 20.04, 8, latest)"
+        required: true
+        default: "20.04"
+
+jobs:
+  build:
+    name: "Build Offline Installer"
+    runs-on: ubuntu-latest
+    env:
+      K8S_VERSION: ${{ github.event.inputs.kubernetes_version }}
+      OS_NAME: ${{ github.event.inputs.operating_system }}
+      OS_VERSION: ${{ github.event.inputs.os_version }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Start Build Container
+        run: |
+          # Select a Docker base image based on user inputs
+          case "${{ env.OS_NAME }}" in
+            ubuntu)   IMAGE="${{ env.OS_NAME }}:${{ env.OS_VERSION }}" ;;
+            debian)   IMAGE="${{ env.OS_NAME }}:${{ env.OS_VERSION }}" ;;
+            centos)   IMAGE="${{ env.OS_NAME }}:${{ env.OS_VERSION }}" ;;
+            rocky)    IMAGE="rockylinux:${{ env.OS_VERSION }}" ;;
+            fedora)   IMAGE="fedora:${{ env.OS_VERSION }}" ;;
+            arch)     IMAGE="archlinux:${{ env.OS_VERSION }}" ;;
+            opensuse) IMAGE="opensuse/leap:${{ env.OS_VERSION }}" ;;
+            *) 
+              echo "Unsupported OS: ${{ env.OS_NAME }}"
+              exit 1
+              ;;
+          esac
+
+          echo "Starting build container for ${{ env.OS_NAME }} (${{ env.OS_VERSION }})..."
+          docker run --rm -d \
+            --name build-container \
+            -v "$PWD:/repo" \
+            -w /repo \
+            "$IMAGE" tail -f /dev/null
+
+      - name: Ensure Correct Artifacts Directory Inside Container
+        run: docker exec build-container bash -c "mkdir -p /test-env/artifacts && chmod -R 777 /test-env/artifacts"
+
+      - name: Run Kubernetes Dependency & Package Indexer
+        run: docker exec build-container bash -c "bash /repo/deploy/pipeline/setup.sh ${{ env.OS_NAME }} ${{ env.K8S_VERSION }} /test-env/artifacts"
+
+      - name: Stop Build Container
+        run: docker stop build-container || echo "Warning Build container was already stopped."
+
+      - name: Upload Offline Package Archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: offline_packages_${{ env.OS_NAME }}_${{ env.K8S_VERSION }}
+          path: artifacts/offline_packages_${{ env.OS_NAME }}_${{ env.K8S_VERSION }}.tar.gz
+
+      - name: Upload Offline Installation Script
+        uses: actions/upload-artifact@v4
+        with:
+          name: install_script_${{ env.OS_NAME }}_${{ env.K8S_VERSION }}
+          path: artifacts/install_${{ env.OS_NAME }}_${{ env.K8S_VERSION }}.sh
+
+  test_install:
+    name: "Test Air-Gapped Installation"
+    runs-on: ubuntu-latest
+    needs: build
+    env:
+      K8S_VERSION: ${{ github.event.inputs.kubernetes_version }}
+      OS_NAME: ${{ github.event.inputs.operating_system }}
+      OS_VERSION: ${{ github.event.inputs.os_version }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Download Offline Package Archive
+        uses: actions/download-artifact@v4
+        with:
+          name: offline_packages_${{ env.OS_NAME }}_${{ env.K8S_VERSION }}
+          path: artifacts/
+
+      - name: Download Offline Installation Script
+        uses: actions/download-artifact@v4
+        with:
+          name: install_script_${{ env.OS_NAME }}_${{ env.K8S_VERSION }}
+          path: artifacts/
+
+      - name: Start Test Container (No Internet)
+        run: |
+          case "${{ env.OS_NAME }}" in
+            ubuntu)   IMAGE="${{ env.OS_NAME }}:${{ env.OS_VERSION }}" ;;
+            debian)   IMAGE="${{ env.OS_NAME }}:${{ env.OS_VERSION }}" ;;
+            centos)   IMAGE="${{ env.OS_NAME }}:${{ env.OS_VERSION }}" ;;
+            rocky)    IMAGE="rockylinux:${{ env.OS_VERSION }}" ;;
+            fedora)   IMAGE="fedora:${{ env.OS_VERSION }}" ;;
+            arch)     IMAGE="archlinux:${{ env.OS_VERSION }}" ;;
+            opensuse) IMAGE="opensuse/leap:${{ env.OS_VERSION }}" ;;
+            *)
+              echo "Unsupported OS: ${{ env.OS_NAME }}"
+              exit 1
+              ;;
+          esac
+
+          echo "Starting test container for ${{ env.OS_NAME }} (${{ env.OS_VERSION }}) with no network..."
+          docker run --rm -d \
+            --name test-container \
+            --network none \
+            -v "$PWD/artifacts:/test-env/artifacts" \
+            "$IMAGE" tail -f /dev/null
+
+      - name: Debug List Extracted Files Inside Test Container
+        run: docker exec test-container ls -lah /test-env/artifacts || echo "Warning No extracted packages found!"
+
+      - name: Extract Offline Packages Inside Test Container
+        run: docker exec test-container bash -c "tar -xvf /test-env/artifacts/offline_packages_${{ env.OS_NAME }}_${{ env.K8S_VERSION }}.tar.gz -C /test-env/artifacts/ || echo 'No extraction needed'"
+
+      - name: Run Offline Installation Inside Test Container
+        run: docker exec test-container bash -c "chmod +x /test-env/artifacts/install_${{ env.OS_NAME }}_${{ env.K8S_VERSION }}.sh && /test-env/artifacts/install_${{ env.OS_NAME }}_${{ env.K8S_VERSION }}.sh"
+
+      - name: Stop Test Container
+        run: docker stop test-container || echo "Warning Test container was already stopped."
