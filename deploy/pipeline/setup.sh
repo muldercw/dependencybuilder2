@@ -127,60 +127,85 @@ set -e  # Stop on first error
 echo "🚀 Installing only available packages from /test-env/artifacts/"
 PKG_DIR="/test-env/artifacts/"
 
-echo "🔍 Checking OS information..."
+echo "============================================"
+echo "DEBUG STEP 1: Which shell am I in?"
+echo "============================================"
+echo "\$0 = $0"
+# If this prints something like 'sh', you may not really have bash features.
+# Also, let's see if /bin/bash truly exists:
+if [[ -x /bin/bash ]]; then
+  echo "Yes, /bin/bash exists and is executable."
+  ls -l /bin/bash
+else
+  echo "WARNING: /bin/bash not found or not executable!"
+fi
+echo
 
+echo "============================================"
+echo "DEBUG STEP 2: Display OS-Release Info"
+echo "============================================"
 if [[ -f "/etc/os-release" ]]; then
-    echo "ℹ️ Contents of /etc/os-release (plain cat):"
+    echo "ℹ️ Plain cat /etc/os-release:"
     cat /etc/os-release
 
     echo
-    echo "=== DEBUG: cat -A /etc/os-release (shows non-printable symbols) ==="
-    # 'cat -A' may not always be available in minimal images, but let's try
+    echo "=== cat -A /etc/os-release (shows non-printable symbols) ==="
     cat -A /etc/os-release || echo "Warning: 'cat -A' not found."
 
     echo
-    echo "=== DEBUG: xxd /etc/os-release (hex dump) ==="
-    # 'xxd' may not always be installed, but let's try
-    xxd /etc/os-release || echo "Warning: 'xxd' not installed."
+    echo "=== Attempting lenient grep for 'ubuntu' ==="
+    if grep -i 'ubuntu' /etc/os-release; then
+        echo " -> Found 'ubuntu' substring in /etc/os-release"
+    else
+        echo " -> No match for 'ubuntu' substring in /etc/os-release"
+    fi
 
     echo
-    echo "=== DEBUG: Checking if we can grep 'ubuntu' at all ==="
-    if grep -i 'ubuntu' /etc/os-release; then
-        echo "Found 'ubuntu' substring in /etc/os-release"
+    echo "=== Attempting direct grep for '^ID=ubuntu' ==="
+    if grep -q '^ID=ubuntu' /etc/os-release; then
+        echo " -> Found a line exactly matching 'ID=ubuntu'"
     else
-        echo "No match for 'ubuntu' substring in /etc/os-release"
+        echo " -> Did NOT find an exact line 'ID=ubuntu'"
     fi
-
-    # -- Super-lenient grep approach (just look for keywords) --
-    if grep -iq 'ubuntu' /etc/os-release; then
-        OS_ID="ubuntu"
-    elif grep -iq 'debian' /etc/os-release; then
-        OS_ID="debian"
-    elif grep -iq 'centos' /etc/os-release; then
-        OS_ID="centos"
-    elif grep -iq 'rocky' /etc/os-release; then
-        OS_ID="rocky"
-    elif grep -iq 'rhel' /etc/os-release; then
-        OS_ID="rhel"
-    elif grep -iq 'fedora' /etc/os-release; then
-        OS_ID="fedora"
-    elif grep -iq 'arch' /etc/os-release; then
-        OS_ID="arch"
-    elif grep -iq 'suse' /etc/os-release; then
-        OS_ID="suse"
-    else
-        OS_ID=""
-    fi
-
-    echo "DEBUG: OS_ID (from super-lenient grep) = '$OS_ID'"
 else
-    echo "⚠️ Warning: /etc/os-release not found!"
-    OS_ID=""
+    echo "⚠️ /etc/os-release NOT found!"
+fi
+echo
+
+echo "============================================"
+echo "DEBUG STEP 3: Setting OS_ID in if-block"
+echo "============================================"
+OS_ID=""
+if grep -iq 'ubuntu' /etc/os-release; then
+    echo "Inside 'if grep -iq ubuntu' block"
+    OS_ID="ubuntu"
+    echo "Inside if-block, OS_ID = [$OS_ID]"
+elif grep -iq 'debian' /etc/os-release; then
+    echo "Inside 'elif grep -iq debian' block"
+    OS_ID="debian"
+elif grep -iq 'centos' /etc/os-release; then
+    OS_ID="centos"
+elif grep -iq 'rocky' /etc/os-release; then
+    OS_ID="rocky"
+elif grep -iq 'rhel' /etc/os-release; then
+    OS_ID="rhel"
+elif grep -iq 'fedora' /etc/os-release; then
+    OS_ID="fedora"
+elif grep -iq 'arch' /etc/os-release; then
+    OS_ID="arch"
+elif grep -iq 'suse' /etc/os-release; then
+    OS_ID="suse"
 fi
 
-# === Fallback detection if OS_ID is still empty ===
+echo "After if-block, OS_ID = [$OS_ID]"
+echo
+
+echo "============================================"
+echo "DEBUG STEP 4: Fallback Detection"
+echo "============================================"
 if [[ -z "$OS_ID" ]]; then
-    if command -v lsb_release &> /dev/null; then
+    echo " -> OS_ID is empty, checking fallback methods..."
+    if command -v lsb_release &>/dev/null; then
         OS_ID=$(lsb_release -si | awk '{print tolower($1)}')
     elif [[ -f "/etc/debian_version" ]]; then
         OS_ID="debian"
@@ -188,7 +213,7 @@ if [[ -z "$OS_ID" ]]; then
         OS_ID="rhel"
     elif [[ -f "/etc/SuSE-release" ]]; then
         OS_ID="suse"
-    elif command -v uname &> /dev/null; then
+    elif command -v uname &>/dev/null; then
         OS_KERNEL=$(uname -s)
         if [[ "$OS_KERNEL" == "Linux" ]]; then
             OS_ID="linux"
@@ -196,17 +221,17 @@ if [[ -z "$OS_ID" ]]; then
     fi
 fi
 
+echo "After fallback, OS_ID = [$OS_ID]"
+echo
+
 if [[ -z "$OS_ID" ]]; then
-    echo "❌ ERROR: Unable to detect OS."
+    echo "❌ ERROR: Unable to detect OS (OS_ID is still empty)."
     exit 1
+else
+    echo "🔍 Detected OS: $OS_ID"
 fi
 
-echo "🔍 Detected OS: $OS_ID"
-
-# === Then proceed with your package manager logic below ===
-
-
-# === Step 2: Determine Package Manager ===
+# === Step 2: Determine Package Manager (example) ===
 if [[ "$OS_ID" == "ubuntu" || "$OS_ID" == "debian" ]]; then
     PKG_MANAGER="dpkg"
 elif [[ "$OS_ID" == "rhel" || "$OS_ID" == "rocky" || "$OS_ID" == "centos" ]]; then
@@ -224,7 +249,8 @@ fi
 
 echo "📂 Installing Kubernetes using: $PKG_MANAGER"
 
-# ... remainder of your install steps ...
+# ... (rest of your script) ...
+
 
 
 
