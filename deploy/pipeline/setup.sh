@@ -124,176 +124,154 @@ cat <<EOF > "$INSTALL_SCRIPT"
 #!/bin/bash
 set -e  # Stop on first error
 
+###############################################################################
+# Step 0: Debug checks
+###############################################################################
 echo "🚀 Installing only available packages from /test-env/artifacts/"
 PKG_DIR="/test-env/artifacts/"
 
-echo "============================================"
-echo "DEBUG STEP 1: Which shell am I in?"
-echo "============================================"
+echo "=== DEBUG 0.1: Check if OS_ID is declared/read-only in the environment ==="
+declare -p OS_ID 2>/dev/null || echo "No existing OS_ID variable detected."
+if readonly -p | grep -q ' OS_ID='; then
+  echo "!!! OS_ID appears to be read-only in this shell environment!"
+fi
+echo
+
+echo "=== DEBUG 0.2: Which shell am I in? ==="
 echo "\$0 = $0"
-# If this prints something like 'sh', you may not really have bash features.
-# Also, let's see if /bin/bash truly exists:
 if [[ -x /bin/bash ]]; then
-  echo "Yes, /bin/bash exists and is executable."
+  echo "Yes, /bin/bash exists and is executable:"
   ls -l /bin/bash
 else
   echo "WARNING: /bin/bash not found or not executable!"
 fi
 echo
 
-echo "============================================"
-echo "DEBUG STEP 2: Display OS-Release Info"
-echo "============================================"
+
+###############################################################################
+# Step 1: OS Detection (using DETECTED_OS instead of OS_ID)
+###############################################################################
+DETECTED_OS=""
+
+echo "🔍 Checking OS information..."
 if [[ -f "/etc/os-release" ]]; then
     echo "ℹ️ Plain cat /etc/os-release:"
     cat /etc/os-release
-
+    
     echo
     echo "=== cat -A /etc/os-release (shows non-printable symbols) ==="
     cat -A /etc/os-release || echo "Warning: 'cat -A' not found."
 
     echo
-    echo "=== Attempting lenient grep for 'ubuntu' ==="
-    if grep -i 'ubuntu' /etc/os-release; then
-        echo " -> Found 'ubuntu' substring in /etc/os-release"
-    else
-        echo " -> No match for 'ubuntu' substring in /etc/os-release"
+    echo "=== Attempting a lenient grep for known distros ==="
+    if   grep -iq 'ubuntu' /etc/os-release;  then DETECTED_OS="ubuntu"
+    elif grep -iq 'debian' /etc/os-release;  then DETECTED_OS="debian"
+    elif grep -iq 'centos' /etc/os-release;  then DETECTED_OS="centos"
+    elif grep -iq 'rocky'  /etc/os-release;  then DETECTED_OS="rocky"
+    elif grep -iq 'rhel'   /etc/os-release;  then DETECTED_OS="rhel"
+    elif grep -iq 'fedora' /etc/os-release;  then DETECTED_OS="fedora"
+    elif grep -iq 'arch'   /etc/os-release;  then DETECTED_OS="arch"
+    elif grep -iq 'suse'   /etc/os-release;  then DETECTED_OS="suse"
     fi
-
-    echo
-    echo "=== Attempting direct grep for '^ID=ubuntu' ==="
-    if grep -q '^ID=ubuntu' /etc/os-release; then
-        echo " -> Found a line exactly matching 'ID=ubuntu'"
-    else
-        echo " -> Did NOT find an exact line 'ID=ubuntu'"
-    fi
+    
+    echo "DEBUG: DETECTED_OS after lenient grep = [$DETECTED_OS]"
 else
     echo "⚠️ /etc/os-release NOT found!"
 fi
-echo
 
-echo "============================================"
-echo "DEBUG STEP 3: Setting OS_ID in if-block"
-echo "============================================"
-OS_ID=""
-if grep -iq 'ubuntu' /etc/os-release; then
-    echo "Inside 'if grep -iq ubuntu' block"
-    OS_ID="ubuntu"
-    echo "Inside if-block, OS_ID = [$OS_ID]"
-elif grep -iq 'debian' /etc/os-release; then
-    echo "Inside 'elif grep -iq debian' block"
-    OS_ID="debian"
-elif grep -iq 'centos' /etc/os-release; then
-    OS_ID="centos"
-elif grep -iq 'rocky' /etc/os-release; then
-    OS_ID="rocky"
-elif grep -iq 'rhel' /etc/os-release; then
-    OS_ID="rhel"
-elif grep -iq 'fedora' /etc/os-release; then
-    OS_ID="fedora"
-elif grep -iq 'arch' /etc/os-release; then
-    OS_ID="arch"
-elif grep -iq 'suse' /etc/os-release; then
-    OS_ID="suse"
-fi
-
-echo "After if-block, OS_ID = [$OS_ID]"
-echo
-
-echo "============================================"
-echo "DEBUG STEP 4: Fallback Detection"
-echo "============================================"
-if [[ -z "$OS_ID" ]]; then
-    echo " -> OS_ID is empty, checking fallback methods..."
+# --- Fallback detection methods if DETECTED_OS is still empty ---
+if [[ -z "$DETECTED_OS" ]]; then
+    echo " -> DETECTED_OS is empty; checking fallback methods..."
     if command -v lsb_release &>/dev/null; then
-        OS_ID=$(lsb_release -si | awk '{print tolower($1)}')
+        DETECTED_OS=$(lsb_release -si | awk '{print tolower($1)}')
     elif [[ -f "/etc/debian_version" ]]; then
-        OS_ID="debian"
+        DETECTED_OS="debian"
     elif [[ -f "/etc/redhat-release" ]]; then
-        OS_ID="rhel"
+        DETECTED_OS="rhel"
     elif [[ -f "/etc/SuSE-release" ]]; then
-        OS_ID="suse"
+        DETECTED_OS="suse"
     elif command -v uname &>/dev/null; then
         OS_KERNEL=$(uname -s)
         if [[ "$OS_KERNEL" == "Linux" ]]; then
-            OS_ID="linux"
+            DETECTED_OS="linux"
         fi
     fi
 fi
 
-echo "After fallback, OS_ID = [$OS_ID]"
-echo
-
-if [[ -z "$OS_ID" ]]; then
-    echo "❌ ERROR: Unable to detect OS (OS_ID is still empty)."
+if [[ -z "$DETECTED_OS" ]]; then
+    echo "❌ ERROR: Unable to detect OS (DETECTED_OS is still empty)."
     exit 1
-else
-    echo "🔍 Detected OS: $OS_ID"
 fi
 
-# === Step 2: Determine Package Manager (example) ===
-if [[ "$OS_ID" == "ubuntu" || "$OS_ID" == "debian" ]]; then
+echo "🔍 Detected OS: $DETECTED_OS"
+
+
+###############################################################################
+# Step 2: Determine Package Manager
+###############################################################################
+if [[ "$DETECTED_OS" == "ubuntu" || "$DETECTED_OS" == "debian" ]]; then
     PKG_MANAGER="dpkg"
-elif [[ "$OS_ID" == "rhel" || "$OS_ID" == "rocky" || "$OS_ID" == "centos" ]]; then
+elif [[ "$DETECTED_OS" == "rhel" || "$DETECTED_OS" == "rocky" || "$DETECTED_OS" == "centos" ]]; then
     PKG_MANAGER="dnf"
-elif [[ "$OS_ID" == "fedora" ]]; then
+elif [[ "$DETECTED_OS" == "fedora" ]]; then
     PKG_MANAGER="dnf_fedora"
-elif [[ "$OS_ID" == "arch" ]]; then
+elif [[ "$DETECTED_OS" == "arch" ]]; then
     PKG_MANAGER="pacman"
-elif [[ "$OS_ID" == "suse" || "$OS_ID" == "opensuse" ]]; then
+elif [[ "$DETECTED_OS" == "suse" || "$DETECTED_OS" == "opensuse" ]]; then
     PKG_MANAGER="zypper"
 else
-    echo "❌ ERROR: Unsupported OS: $OS_ID"
+    echo "❌ ERROR: Unsupported OS: $DETECTED_OS"
     exit 1
 fi
 
 echo "📂 Installing Kubernetes using: $PKG_MANAGER"
 
-# ... (rest of your script) ...
 
-
-
-
-
-# ✅ **Step 3: Install Kubernetes Components**
+###############################################################################
+# Step 3: (Optional) Install packages from $PKG_DIR
+# This is just an example showing typical logic. Adjust as needed for your setup.
+###############################################################################
 if [[ "$PKG_MANAGER" == "dpkg" ]]; then
-    echo "📦 Installing .deb packages..."
-    find "$PKG_DIR" -type f -name "*.deb" -exec dpkg -i {} + || echo "⚠️ Warning: Some packages may have failed to install."
+    echo "📦 Installing .deb packages from $PKG_DIR..."
+    find "$PKG_DIR" -type f -name "*.deb" -exec dpkg -i {} + || \
+      echo "⚠️ Warning: Some packages may have failed to install."
     echo "🔧 Fixing broken dependencies..."
     apt-get -y install --fix-broken || echo "⚠️ Warning: Some dependencies may still be missing."
 
 elif [[ "$PKG_MANAGER" == "dnf" ]]; then
-    echo "📦 Installing .rpm packages..."
+    echo "📦 Installing .rpm packages from $PKG_DIR..."
     dnf install -y "$PKG_DIR"/*.rpm || echo "⚠️ Warning: Some packages may have failed to install."
 
 elif [[ "$PKG_MANAGER" == "dnf_fedora" ]]; then
-    echo "🔄 Refreshing Fedora metadata... (SKIPPED - Airgapped Mode)"
-    echo "📦 Installing .rpm packages..."
+    echo "🔄 Refreshing Fedora metadata... (SKIPPED - air-gapped mode)"
+    echo "📦 Installing .rpm packages from $PKG_DIR..."
     dnf install -y "$PKG_DIR"/*.rpm || echo "⚠️ Warning: Some packages may have failed to install."
 
 elif [[ "$PKG_MANAGER" == "pacman" ]]; then
-    echo "🔍 Checking pacman database..."
-    if [[ ! -f /var/lib/pacman/sync/core.db ]]; then
-        echo "⚠️ Skipping database sync (air-gapped mode)..."
-    fi
-    echo "📦 Installing pre-downloaded .pkg.tar.zst packages..."
-    find "$PKG_DIR" -type f -name "*.pkg.tar.zst" -exec pacman -U --noconfirm {} + || echo "⚠️ Warning: Some packages may have failed to install."
+    echo "📦 Installing .pkg.tar.zst packages from $PKG_DIR (arch)..."
+    find "$PKG_DIR" -type f -name "*.pkg.tar.zst" -exec pacman -U --noconfirm {} + || \
+      echo "⚠️ Warning: Some packages may have failed to install."
 
 elif [[ "$PKG_MANAGER" == "zypper" ]]; then
-    echo "🔄 Refreshing Zypper metadata... (SKIPPED - Airgapped Mode)"
-    echo "📦 Installing .rpm packages..."
-    zypper --non-interactive install "$PKG_DIR"/*.rpm || echo "⚠️ Warning: Some packages may have failed to install."
+    echo "🔄 Refreshing Zypper metadata... (SKIPPED - air-gapped mode)"
+    echo "📦 Installing .rpm packages from $PKG_DIR..."
+    zypper --non-interactive install "$PKG_DIR"/*.rpm || \
+      echo "⚠️ Warning: Some packages may have failed to install."
 fi
 
-# ✅ **Final Verification**
+
+###############################################################################
+# Step 4: Final Verification
+###############################################################################
 echo "🔍 Verifying installed Kubernetes components..."
 case "$PKG_MANAGER" in
-    dpkg) dpkg -l | grep -E "kubeadm|kubelet|kubectl|containerd" 2>/dev/null || echo "⚠️ Warning: Some Kubernetes components may not be installed." ;;
-    pacman) pacman -Q | grep -E "kubeadm|kubelet|kubectl|containerd" 2>/dev/null || echo "⚠️ Warning: Some Kubernetes components may not be installed." ;;
-    dnf|dnf_fedora|zypper) rpm -qa | grep -E "kubeadm|kubelet|kubectl|containerd" 2>/dev/null || echo "⚠️ Warning: Some Kubernetes components may not be installed." ;;
+    dpkg) dpkg -l | grep -E "kubeadm|kubelet|kubectl|containerd" 2>/dev/null || echo "⚠️ Some components may not be installed." ;;
+    dnf|dnf_fedora|zypper) rpm -qa | grep -E "kubeadm|kubelet|kubectl|containerd" 2>/dev/null || echo "⚠️ Some components may not be installed." ;;
+    pacman) pacman -Q | grep -E "kubeadm|kubelet|kubectl|containerd" 2>/dev/null || echo "⚠️ Some components may not be installed." ;;
 esac
 
-echo "✅ Kubernetes installation complete."
+echo "✅ Kubernetes offline installation script complete."
+
 
 EOF
 
