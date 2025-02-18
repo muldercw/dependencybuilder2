@@ -133,16 +133,14 @@ echo "🔍 Checking OS information..."
 if [[ -f "/etc/os-release" ]]; then
     echo "ℹ️ Contents of /etc/os-release:"
     cat /etc/os-release
-    
-    # Safely parse /etc/os-release for ID=... 
-    # 1) Remove any CR characters (\r).
-    # 2) Remove a possible BOM at the start of the file.
-    # 3) Extract the line starting exactly with 'ID=' after cleaning.
+
+    # Strip carriage returns and BOM, then use AWK to extract ID= value
     OS_ID=$(
       sed 's/\r//g; s/^\xEF\xBB\xBF//g' /etc/os-release \
-      | sed -n 's/^ID=//p' \
+      | awk -F= '$1 == "ID" { print $2 }' \
       | tr -d '"'
     )
+
     echo "DEBUG: OS_ID (from /etc/os-release) = '$OS_ID'"
 else
     echo "⚠️ Warning: /etc/os-release not found!"
@@ -198,8 +196,8 @@ else
     exit 1
 fi
 
-
 echo "📂 Installing Kubernetes using: $PKG_MANAGER"
+
 
 # ✅ **Step 3: Install Kubernetes Components**
 if [[ "$PKG_MANAGER" == "dpkg" ]]; then
