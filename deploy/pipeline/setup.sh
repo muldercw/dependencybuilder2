@@ -127,27 +127,39 @@ set -e  # Stop on first error
 echo "🚀 Installing only available packages from /test-env/artifacts/"
 PKG_DIR="/test-env/artifacts/"
 
-# === Step 1: Debug OS Detection ===
 echo "🔍 Checking OS information..."
-
 if [[ -f "/etc/os-release" ]]; then
     echo "ℹ️ Contents of /etc/os-release:"
     cat /etc/os-release
 
-    # Strip carriage returns and BOM, then use AWK to extract ID= value
-    OS_ID=$(
-      sed 's/\r//g; s/^\xEF\xBB\xBF//g' /etc/os-release \
-      | awk -F= '$1 == "ID" { print $2 }' \
-      | tr -d '"'
-    )
+    # -- Hard-coded checks for each known OS ID --
+    if grep -iq '^ID=.*ubuntu' /etc/os-release; then
+        OS_ID="ubuntu"
+    elif grep -iq '^ID=.*debian' /etc/os-release; then
+        OS_ID="debian"
+    elif grep -iq '^ID=.*centos' /etc/os-release; then
+        OS_ID="centos"
+    elif grep -iq '^ID=.*rhel' /etc/os-release; then
+        OS_ID="rhel"
+    elif grep -iq '^ID=.*rocky' /etc/os-release; then
+        OS_ID="rocky"
+    elif grep -iq '^ID=.*fedora' /etc/os-release; then
+        OS_ID="fedora"
+    elif grep -iq '^ID=.*arch' /etc/os-release; then
+        OS_ID="arch"
+    elif grep -iq '^ID=.*suse' /etc/os-release; then
+        OS_ID="opensuse"
+    else
+        OS_ID=""
+    fi
 
-    echo "DEBUG: OS_ID (from /etc/os-release) = '$OS_ID'"
+    echo "DEBUG: OS_ID (from custom grep checks) = '$OS_ID'"
 else
     echo "⚠️ Warning: /etc/os-release not found!"
     OS_ID=""
 fi
 
-# == Fallback OS detection methods if /etc/os-release was incomplete ==
+# === Fallback detection if OS_ID is still empty ===
 if [[ -z "$OS_ID" ]]; then
     if command -v lsb_release &> /dev/null; then
         OS_ID=$(lsb_release -si | awk '{print tolower($1)}')
@@ -165,14 +177,6 @@ if [[ -z "$OS_ID" ]]; then
     fi
 fi
 
-# Special Handling for Arch Linux
-if [[ -z "$OS_ID" ]] && [[ -f "/etc/os-release" ]]; then
-    if grep -qi "Arch Linux" /etc/os-release; then
-        OS_ID="arch"
-    fi
-fi
-
-# Print detected OS
 if [[ -z "$OS_ID" ]]; then
     echo "❌ ERROR: Unable to detect OS."
     exit 1
@@ -180,7 +184,7 @@ fi
 
 echo "🔍 Detected OS: $OS_ID"
 
-# === Step 2: Determine Package Manager ===
+# -- Step 2: Determine Package Manager Based on OS_ID --
 if [[ "$OS_ID" == "ubuntu" || "$OS_ID" == "debian" ]]; then
     PKG_MANAGER="dpkg"
 elif [[ "$OS_ID" == "rhel" || "$OS_ID" == "rocky" || "$OS_ID" == "centos" ]]; then
@@ -189,7 +193,7 @@ elif [[ "$OS_ID" == "fedora" ]]; then
     PKG_MANAGER="dnf_fedora"
 elif [[ "$OS_ID" == "arch" ]]; then
     PKG_MANAGER="pacman"
-elif [[ "$OS_ID" == "suse" || "$OS_ID" == "opensuse" ]]; then
+elif [[ "$OS_ID" == "opensuse" || "$OS_ID" == "suse" ]]; then
     PKG_MANAGER="zypper"
 else
     echo "❌ ERROR: Unsupported OS: $OS_ID"
@@ -197,6 +201,7 @@ else
 fi
 
 echo "📂 Installing Kubernetes using: $PKG_MANAGER"
+
 
 
 # ✅ **Step 3: Install Kubernetes Components**
