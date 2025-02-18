@@ -125,32 +125,57 @@ cat <<EOF > "$INSTALL_SCRIPT"
 set -e  # Stop on first error
 
 ###############################################################################
-# Step 0: Debug checks
+# Ultra-Debug Start
+###############################################################################
+echo "================================================================================="
+echo "Step 0: Ultra-Debug Info"
+echo "================================================================================="
+# Turn on line-by-line debug
+set -x
+
+# 0.1) Which script & shell am I actually in?
+echo "DEBUG: \$0 = $0"
+if [[ -L "$0" ]]; then
+  echo "DEBUG: $0 is a symlink, pointing to: $(readlink "$0")"
+fi
+
+# 0.2) Where is 'bash'? Is it installed?
+if [[ -x /bin/bash ]]; then
+  echo "DEBUG: /bin/bash exists"
+  ls -l /bin/bash
+else
+  echo "DEBUG: /bin/bash NOT found or not executable!"
+fi
+
+# 0.3) Show current process name
+ps -o pid,ppid,cmd -p $$ || true
+
+# 0.4) Is grep aliased or read-only in the environment?
+echo "DEBUG: Checking for 'grep' details..."
+type grep || echo "Cannot run 'type grep'"
+alias grep || echo "No alias for grep"
+grep --version || echo "grep --version failed"
+
+# 0.5) Are there any environment variables that might affect grep?
+env | grep -i grep || echo "No GREP-related environment variables found"
+
+# 0.6) Check if OS_ID or DETECTED_OS is read-only in the shell
+if readonly -p 2>/dev/null | grep -q ' OS_ID='; then
+  echo "WARNING: OS_ID is read-only!"
+fi
+if readonly -p 2>/dev/null | grep -q ' DETECTED_OS='; then
+  echo "WARNING: DETECTED_OS is read-only!"
+fi
+
+# 0.7) Dump environment for final clues (optional, can be huge)
+# env | sort
+
+###############################################################################
+# Begin: Our normal script logic
 ###############################################################################
 echo "🚀 Installing only available packages from /test-env/artifacts/"
 PKG_DIR="/test-env/artifacts/"
 
-echo "=== DEBUG 0.1: Check if OS_ID is declared/read-only in the environment ==="
-declare -p OS_ID 2>/dev/null || echo "No existing OS_ID variable detected."
-if readonly -p | grep -q ' OS_ID='; then
-  echo "!!! OS_ID appears to be read-only in this shell environment!"
-fi
-echo
-
-echo "=== DEBUG 0.2: Which shell am I in? ==="
-echo "\$0 = $0"
-if [[ -x /bin/bash ]]; then
-  echo "Yes, /bin/bash exists and is executable:"
-  ls -l /bin/bash
-else
-  echo "WARNING: /bin/bash not found or not executable!"
-fi
-echo
-
-
-###############################################################################
-# Step 1: OS Detection (using DETECTED_OS instead of OS_ID)
-###############################################################################
 DETECTED_OS=""
 
 echo "🔍 Checking OS information..."
@@ -175,6 +200,12 @@ if [[ -f "/etc/os-release" ]]; then
     fi
     
     echo "DEBUG: DETECTED_OS after lenient grep = [$DETECTED_OS]"
+
+    # 1) If we see "ID=ubuntu" EXACTLY, force DETECTED_OS="ubuntu" as a fallback
+    if grep -q '^ID=ubuntu' /etc/os-release; then
+       echo "DEBUG: Found exact line '^ID=ubuntu', forcing DETECTED_OS=ubuntu"
+       DETECTED_OS="ubuntu"
+    fi
 else
     echo "⚠️ /etc/os-release NOT found!"
 fi
@@ -199,16 +230,22 @@ if [[ -z "$DETECTED_OS" ]]; then
 fi
 
 if [[ -z "$DETECTED_OS" ]]; then
-    echo "❌ ERROR: Unable to detect OS (DETECTED_OS is still empty)."
-    exit 1
+    echo "=== FINAL FALLBACK: Checking if /etc/os-release literally contains 'ubuntu' in any form ==="
+    if grep -q 'ubuntu' /etc/os-release; then
+        echo "    Found 'ubuntu' in the file, forcibly setting DETECTED_OS='ubuntu'"
+        DETECTED_OS="ubuntu"
+    fi
 fi
 
-echo "🔍 Detected OS: $DETECTED_OS"
+# If STILL empty, we truly fail
+if [[ -z "$DETECTED_OS" ]]; then
+    echo "❌ ERROR: Unable to detect OS (DETECTED_OS is still empty)."
+    exit 1
+else
+    echo "🔍 Detected OS: $DETECTED_OS"
+fi
 
-
-###############################################################################
-# Step 2: Determine Package Manager
-###############################################################################
+# === Step 2: Determine Package Manager (example) ===
 if [[ "$DETECTED_OS" == "ubuntu" || "$DETECTED_OS" == "debian" ]]; then
     PKG_MANAGER="dpkg"
 elif [[ "$DETECTED_OS" == "rhel" || "$DETECTED_OS" == "rocky" || "$DETECTED_OS" == "centos" ]]; then
@@ -225,6 +262,8 @@ else
 fi
 
 echo "📂 Installing Kubernetes using: $PKG_MANAGER"
+echo "DEBUG: Completed OS detection logic successfully."
+
 
 
 ###############################################################################
