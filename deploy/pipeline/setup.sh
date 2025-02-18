@@ -130,17 +130,22 @@ PKG_DIR="/test-env/artifacts/"
 # ✅ **Step 1: Debug OS Detection**
 echo "🔍 Checking OS information..."
 
-# **Ensure /etc/os-release exists before sourcing it**
 if [[ -f "/etc/os-release" ]]; then
     echo "ℹ️ Contents of /etc/os-release:"
     cat /etc/os-release
-    OS_ID=$(grep -E "^ID=" /etc/os-release | cut -d= -f2 | tr -d '"')
+
+    # Source /etc/os-release directly (avoid grep parsing issues)
+    # shellcheck disable=SC1091
+    . /etc/os-release
+
+    # The OS "ID" is typically set here (e.g., 'ubuntu', 'centos', 'fedora', 'opensuse', etc.)
+    OS_ID="$ID"
 else
     echo "⚠️ Warning: /etc/os-release not found!"
     OS_ID=""
 fi
 
-# **Fallback OS detection methods**
+# **Fallback OS detection methods** (only if $OS_ID was not set from /etc/os-release)
 if [[ -z "$OS_ID" ]]; then
     if command -v lsb_release &> /dev/null; then
         OS_ID=$(lsb_release -si | awk '{print tolower($1)}')
@@ -158,8 +163,10 @@ if [[ -z "$OS_ID" ]]; then
     fi
 fi
 
-# **Special Handling for Arch Linux**
-if [[ "$OS_ID" == "" ]] && grep -qi "Arch Linux" /etc/os-release; then
+# **Special Handling for Arch Linux** (if needed)
+# If /etc/os-release doesn't identify Arch properly,
+# we can search for "Arch Linux" in the file as a fallback
+if [[ -z "$OS_ID" ]] && grep -qi "Arch Linux" /etc/os-release 2>/dev/null; then
     OS_ID="arch"
 fi
 
@@ -192,18 +199,18 @@ echo "📂 Installing Kubernetes using: $PKG_MANAGER"
 # ✅ **Step 3: Install Kubernetes Components**
 if [[ "$PKG_MANAGER" == "dpkg" ]]; then
     echo "📦 Installing .deb packages..."
-    find "$PKG_DIR" -type f -name "*.deb" -exec dpkg -i {} + || echo "⚠️ Warning Some packages may have failed to install."
+    find "$PKG_DIR" -type f -name "*.deb" -exec dpkg -i {} + || echo "⚠️ Warning: Some packages may have failed to install."
     echo "🔧 Fixing broken dependencies..."
-    apt-get -y install --fix-broken || echo "⚠️ Warning Some dependencies may still be missing."
+    apt-get -y install --fix-broken || echo "⚠️ Warning: Some dependencies may still be missing."
 
 elif [[ "$PKG_MANAGER" == "dnf" ]]; then
     echo "📦 Installing .rpm packages..."
-    dnf install -y "$PKG_DIR"/*.rpm || echo "⚠️ Warning Some packages may have failed to install."
+    dnf install -y "$PKG_DIR"/*.rpm || echo "⚠️ Warning: Some packages may have failed to install."
 
 elif [[ "$PKG_MANAGER" == "dnf_fedora" ]]; then
     echo "🔄 Refreshing Fedora metadata... (SKIPPED - Airgapped Mode)"
     echo "📦 Installing .rpm packages..."
-    dnf install -y "$PKG_DIR"/*.rpm || echo "⚠️ Warning Some packages may have failed to install."
+    dnf install -y "$PKG_DIR"/*.rpm || echo "⚠️ Warning: Some packages may have failed to install."
 
 elif [[ "$PKG_MANAGER" == "pacman" ]]; then
     echo "🔍 Checking pacman database..."
@@ -211,23 +218,24 @@ elif [[ "$PKG_MANAGER" == "pacman" ]]; then
         echo "⚠️ Skipping database sync (air-gapped mode)..."
     fi
     echo "📦 Installing pre-downloaded .pkg.tar.zst packages..."
-    find "$PKG_DIR" -type f -name "*.pkg.tar.zst" -exec pacman -U --noconfirm {} + || echo "⚠️ Warning Some packages may have failed to install."
+    find "$PKG_DIR" -type f -name "*.pkg.tar.zst" -exec pacman -U --noconfirm {} + || echo "⚠️ Warning: Some packages may have failed to install."
 
 elif [[ "$PKG_MANAGER" == "zypper" ]]; then
     echo "🔄 Refreshing Zypper metadata... (SKIPPED - Airgapped Mode)"
     echo "📦 Installing .rpm packages..."
-    zypper --non-interactive install "$PKG_DIR"/*.rpm || echo "⚠️ Warning Some packages may have failed to install."
+    zypper --non-interactive install "$PKG_DIR"/*.rpm || echo "⚠️ Warning: Some packages may have failed to install."
 fi
 
 # ✅ **Final Verification**
 echo "🔍 Verifying installed Kubernetes components..."
 case "$PKG_MANAGER" in
-    dpkg) dpkg -l | grep -E "kubeadm|kubelet|kubectl|containerd" 2>/dev/null || echo "⚠️ Warning Some Kubernetes components may not be installed." ;;
-    pacman) pacman -Q | grep -E "kubeadm|kubelet|kubectl|containerd" 2>/dev/null || echo "⚠️ Warning Some Kubernetes components may not be installed." ;;
-    dnf|dnf_fedora|zypper) rpm -qa | grep -E "kubeadm|kubelet|kubectl|containerd" 2>/dev/null || echo "⚠️ Warning Some Kubernetes components may not be installed." ;;
+    dpkg) dpkg -l | grep -E "kubeadm|kubelet|kubectl|containerd" 2>/dev/null || echo "⚠️ Warning: Some Kubernetes components may not be installed." ;;
+    pacman) pacman -Q | grep -E "kubeadm|kubelet|kubectl|containerd" 2>/dev/null || echo "⚠️ Warning: Some Kubernetes components may not be installed." ;;
+    dnf|dnf_fedora|zypper) rpm -qa | grep -E "kubeadm|kubelet|kubectl|containerd" 2>/dev/null || echo "⚠️ Warning: Some Kubernetes components may not be installed." ;;
 esac
 
 echo "✅ Kubernetes installation complete."
+
 
 EOF
 
