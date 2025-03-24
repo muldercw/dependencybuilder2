@@ -1,18 +1,16 @@
 name: "Offline Installer Builder"
 
 on:
-  # Keep this if you still want the (effectively disabled) push trigger
   push:
     branches:
       - manual-branch-non-existent
 
-  # Primary trigger for manual runs
   workflow_dispatch:
     inputs:
       kubernetes_version:
         description: "Kubernetes version to build with"
         required: true
-        default: "1.27.3"
+        default: "1.29.1"
       operating_system:
         description: "Operating system to build packages for (e.g. ubuntu, centos)"
         required: true
